@@ -24,7 +24,9 @@
     "no_more_questions": "Keine weiteren Fragen verfügbar",
     "vote_locked": "Gesperrt noch {{seconds}} Sek.",
     "vote_changeable": "Ändern",
-    "vote_changed": "Deine Stimme wurde geändert"
+    "vote_changed": "Deine Stimme wurde geändert",
+    "offline_banner": "Offline – Stimmen werden gespeichert ({{count}} wartend)",
+    "report_abuse": "Melden"
   },
   "ai": {
     "title": "KI-Fakten",
@@ -35,7 +37,34 @@
   "wirksamkeit": {
     "title": "Deine Wirksamkeit",
     "message": "Deine Stimme hat in {{count}} Fällen dazu beigetragen, die Stimmschwelle zu knacken.",
-    "dismiss": "Verstanden"
+    "dismiss": "Verstanden",
+    "what_is": "Was bedeutet \"wirksam\"?",
+    "explanation": "Deine Stimme gilt als wirksam, wenn du früh bei einer Frage abgestimmt hast – bevor sie die Schwelle + 50 Stimmen erreicht hat."
+  },
+  "abuse": {
+    "title": "Frage melden",
+    "explanation": "Melde Fragen, die gegen unsere Nutzungsbedingungen verstoßen:",
+    "rule_hate": "Hassrede oder Diskriminierung",
+    "rule_violence": "Gewaltverherrlichung",
+    "rule_personal": "Persönliche Angriffe",
+    "rule_spam": "Spam oder Werbung",
+    "rule_illegal": "Illegale Inhalte",
+    "warning": "Missbrauch der Meldefunktion kann zu Trust-Score-Abzügen führen.",
+    "submit": "Melden",
+    "success": "Meldung gesendet",
+    "success_message": "Wir prüfen deine Meldung so schnell wie möglich.",
+    "already_reported": "Du hast diese Frage bereits gemeldet.",
+    "rate_limited": "Du hast zu viele Meldungen in kurzer Zeit gesendet. Bitte warte eine Stunde."
+  },
+  "share": {
+    "mood_title": "Meine Stimm-Stimmung",
+    "mood_votes": "Stimmen",
+    "mood_streak": "Tage-Streak",
+    "mood_recent": "Letzte Abstimmungen",
+    "vote_with_majority": "Ich stimme mit der Mehrheit",
+    "vote_against_majority": "Ich stimme gegen die Mehrheit",
+    "pending_result": "Ergebnis wird noch ermittelt...",
+    "pending_votes": "{{count}} Stimmen bisher"
   },
   "settings": {
     "title": "Einstellungen",

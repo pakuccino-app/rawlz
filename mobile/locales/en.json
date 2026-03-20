@@ -8,8 +8,8 @@
     "no": "NO",
     "skip": "Skip",
     "deep_dive": "Learn more",
-    "result": "{{yes}}% for · {{no}}% against · {{total}} votes",
-    "threshold_gate": "Results visible at {{threshold}} votes",
+    "result": "{{yes}}% in favor · {{no}}% against · {{total}} votes",
+    "threshold_gate": "Results visible from {{threshold}} votes",
     "later": "Show later (5 min.)",
     "archive": "Archive",
     "cancel": "Cancel",
@@ -24,7 +24,9 @@
     "no_more_questions": "No more questions available",
     "vote_locked": "Locked for {{seconds}} sec.",
     "vote_changeable": "Change",
-    "vote_changed": "Your vote has been changed"
+    "vote_changed": "Your vote has been changed",
+    "offline_banner": "Offline – Votes are being saved ({{count}} pending)",
+    "report_abuse": "Report"
   },
   "ai": {
     "title": "AI Facts",
@@ -33,9 +35,36 @@
     "error": "Could not load facts"
   },
   "wirksamkeit": {
-    "title": "Your Impact",
-    "message": "Your vote helped reach the threshold in {{count}} cases.",
-    "dismiss": "Got it"
+    "title": "Your Effectiveness",
+    "message": "Your vote contributed to breaking the threshold in {{count}} cases.",
+    "dismiss": "Got it",
+    "what_is": "What does \"effective\" mean?",
+    "explanation": "Your vote is considered effective if you voted early on a question – before it reached the threshold + 50 votes."
+  },
+  "abuse": {
+    "title": "Report Question",
+    "explanation": "Report questions that violate our terms of service:",
+    "rule_hate": "Hate speech or discrimination",
+    "rule_violence": "Glorification of violence",
+    "rule_personal": "Personal attacks",
+    "rule_spam": "Spam or advertising",
+    "rule_illegal": "Illegal content",
+    "warning": "Misuse of the report function may result in trust score deductions.",
+    "submit": "Report",
+    "success": "Report sent",
+    "success_message": "We will review your report as soon as possible.",
+    "already_reported": "You have already reported this question.",
+    "rate_limited": "You have submitted too many reports in a short time. Please wait an hour."
+  },
+  "share": {
+    "mood_title": "My Vote Mood",
+    "mood_votes": "Votes",
+    "mood_streak": "Day streak",
+    "mood_recent": "Recent votes",
+    "vote_with_majority": "I vote with the majority",
+    "vote_against_majority": "I vote against the majority",
+    "pending_result": "Result still being determined...",
+    "pending_votes": "{{count}} votes so far"
   },
   "settings": {
     "title": "Settings",
@@ -54,7 +83,7 @@
     "version": "Version",
     "privacy_policy": "Privacy Policy",
     "imprint": "Imprint",
-    "terms": "Terms of Use"
+    "terms": "Terms of Service"
   },
   "feed_mode": {
     "global": "Global",
@@ -69,10 +98,10 @@
     "lobby": "Lobby",
     "supporter_cta": "Support RAWLZ",
     "supporter_price": "€1",
-    "supporter_benefits": "Results at 100 votes, reduced threshold for suggestions",
+    "supporter_benefits": "Results from 100 votes, reduced threshold for suggestions",
     "restore_purchase": "Already purchased? Restore",
     "supporter_since": "Supporter since {{date}}",
-    "expert_vouches": "{{count}} vouches",
+    "expert_vouches": "{{count}} Vouches",
     "expert_2fa": "2FA enabled",
     "lobby_manage_billing": "Manage billing"
   },
@@ -81,7 +110,7 @@
     "placeholder": "#Topic",
     "already_live": "This question is already live.",
     "vote_now": "Vote now →",
-    "notify_toggle": "Notify me when {{word}} goes live.",
+    "notify_toggle": "Notify me when {{word}} is activated.",
     "remaining": "{{count}} more submissions until activation",
     "submit": "Submit",
     "success": "Successfully submitted!",
@@ -99,7 +128,7 @@
   },
   "history": {
     "title": "My Votes",
-    "no_votes": "You haven't voted yet",
+    "no_votes": "You haven't cast any votes yet",
     "changed_from": "Changed from {{from}} to {{to}}"
   },
   "comparison": {
@@ -133,17 +162,17 @@
   },
   "profile": {
     "title": "My Profile",
-    "demographics": "Demographic Data",
+    "demographics": "Demographics",
     "privacy_notice": "Only evaluated anonymously. Never identifiable as an individual. Can be deleted at any time (GDPR Art. 17).",
     "skip": "Skip",
     "trust_bonus": "+{{bonus}} Trust Score",
-    "age_group": "Age Group",
+    "age_group": "Age group",
     "gender": "Gender",
-    "education": "Education Level",
+    "education": "Education",
     "employment": "Employment",
     "income": "Income",
     "location": "Location",
-    "political": "Political Interest"
+    "political": "Political interest"
   },
   "auth": {
     "title": "Sign In",
@@ -152,28 +181,28 @@
     "sign_in_email": "Sign in with Email",
     "email": "Email",
     "password": "Password",
-    "confirm_password": "Confirm Password",
+    "confirm_password": "Confirm password",
     "sign_in": "Sign In",
     "sign_up": "Sign Up",
     "switch_to_signup": "New here? Sign up",
     "switch_to_signin": "Already registered? Sign in",
     "forgot_password": "Forgot password?",
-    "reset_sent": "Reset link sent. Check your email (including spam folder).",
-    "new_password": "New Password",
-    "update_password": "Update Password",
-    "gdpr_consent": "I agree to the Privacy Policy and am at least 16 years old.",
-    "gdpr_required": "Please accept the Privacy Policy",
+    "reset_sent": "Reset link sent. Check your emails (also spam folder).",
+    "new_password": "New password",
+    "update_password": "Update password",
+    "gdpr_consent": "I agree to the privacy policy and am at least 16 years old.",
+    "gdpr_required": "Please accept the privacy policy",
     "passwords_mismatch": "Passwords do not match",
     "password_too_short": "Password must be at least 8 characters",
     "invalid_email": "Invalid email address",
-    "verification_sent": "Verification email sent. Please check your inbox."
+    "verification_sent": "Verification email sent. Please check your emails."
   },
   "errors": {
-    "network": "No connection. Please check your internet.",
+    "network": "No connection. Please check your internet connection.",
     "generic": "An error occurred. ({{code}})",
-    "auth_failed": "Authentication failed",
+    "auth_failed": "Login failed",
     "load_failed": "Loading failed",
-    "save_failed": "Save failed",
+    "save_failed": "Saving failed",
     "try_again": "Try again"
   },
   "common": {
@@ -190,12 +219,12 @@
     "yes": "Yes",
     "no": "No",
     "ok": "OK",
-    "votes": "votes"
+    "votes": "Votes"
   },
   "time": {
     "just_now": "Just now",
     "minutes_ago": "{{count}} min. ago",
-    "hours_ago": "{{count}} hr. ago",
+    "hours_ago": "{{count}} hrs. ago",
     "yesterday": "Yesterday",
     "days_ago": "{{count}} days ago"
   }

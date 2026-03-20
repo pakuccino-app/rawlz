@@ -1,5 +1,6 @@
 // app/(tabs)/index.tsx
-// Swipe Screen - Main voting interface
+// Swipe Screen - Main voting interface with all Phase 2 features
+// Daily Pulse, Wirksamkeits-Anzeige, Abuse Reporting, Offline Support
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useLocalSearchParams } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,11 +28,27 @@ import {
   Gesture,
   GestureDetector,
 } from 'react-native-gesture-handler';
+import NetInfo from '@react-native-community/netinfo';
 
 import { COLORS, getWordFontSize, RESULT_THRESHOLDS, ANIMATIONS } from '../../lib/constants';
-import { supabase, getCurrentUser } from '../../lib/supabase';
+import { supabase, getCurrentUser, getSession } from '../../lib/supabase';
 import hapticPatterns from '../../lib/haptics';
 import { playSound } from '../../lib/sounds';
+import {
+  prefetchQuestions,
+  getCachedQuestions,
+  queueVote,
+  syncOfflineQueue,
+  getPendingVoteCount,
+  removeFromCache,
+  startNetworkListener,
+  stopNetworkListener,
+} from '../../lib/offlineQueue';
+
+// Components
+import DailyPulseCard from '../../components/DailyPulseCard';
+import WirksamkeitOverlay from '../../components/WirksamkeitOverlay';
+import AbuseReportSheet from '../../components/AbuseReportSheet';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
@@ -51,16 +69,28 @@ interface User {
   membership_type: string;
   is_verified: boolean;
   geo_country?: string;
+  geo_region?: string;
   geo_preference: string;
   streak_count: number;
+  wirksamkeit_shown: boolean;
+}
+
+interface WirksamkeitData {
+  totalVotes: number;
+  effectiveVotes: number;
+  effectivenessPct: number;
 }
 
 export default function SwipeScreen() {
   const { t } = useTranslation();
+  const params = useLocalSearchParams<{ questionId?: string }>();
+  
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [resultData, setResultData] = useState<{ yes: number; no: number; total: number } | null>(null);
   const [flashColor, setFlashColor] = useState<string | null>(null);
@@ -68,6 +98,13 @@ export default function SwipeScreen() {
   const [aiContent, setAIContent] = useState<any>(null);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [showCloudMenu, setShowCloudMenu] = useState(false);
+  
+  // Wirksamkeit state
+  const [showWirksamkeit, setShowWirksamkeit] = useState(false);
+  const [wirksamkeitData, setWirksamkeitData] = useState<WirksamkeitData | null>(null);
+  
+  // Abuse reporting state
+  const [showAbuseReport, setShowAbuseReport] = useState(false);
 
   // Animation values
   const translateX = useSharedValue(0);
@@ -78,16 +115,46 @@ export default function SwipeScreen() {
   // Load user and questions
   useEffect(() => {
     loadData();
+    startNetworkListener();
+
+    // Network state listener
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOnline(state.isConnected ?? true);
+    });
+
+    return () => {
+      unsubscribe();
+      stopNetworkListener();
+    };
   }, []);
+
+  // Check pending offline votes
+  useEffect(() => {
+    const checkPending = async () => {
+      const count = await getPendingVoteCount();
+      setPendingCount(count);
+    };
+    checkPending();
+    const interval = setInterval(checkPending, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle deep link to specific question
+  useEffect(() => {
+    if (params.questionId && questions.length > 0) {
+      const idx = questions.findIndex(q => q.id === params.questionId);
+      if (idx >= 0) {
+        setCurrentIndex(idx);
+      }
+    }
+  }, [params.questionId, questions]);
 
   async function loadData() {
     setIsLoading(true);
     try {
-      // Get current user
       const authUser = await getCurrentUser();
       if (!authUser) return;
 
-      // Get user data from DB
       const { data: userData } = await supabase
         .from('users')
         .select('*')
@@ -97,6 +164,14 @@ export default function SwipeScreen() {
       if (userData) {
         setUser(userData);
         await loadQuestions(userData);
+        
+        // Prefetch for offline
+        prefetchQuestions(
+          userData.id,
+          userData.geo_preference,
+          userData.geo_country,
+          userData.geo_region
+        );
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -106,33 +181,49 @@ export default function SwipeScreen() {
   }
 
   async function loadQuestions(userData: User) {
-    // First get daily pulse if any
+    const netState = await NetInfo.fetch();
+    
+    if (!netState.isConnected) {
+      // Load from cache
+      const cached = await getCachedQuestions(userData.id);
+      let questions = cached.questions;
+      if (cached.dailyPulse) {
+        questions = [cached.dailyPulse, ...questions.filter(q => q.id !== cached.dailyPulse?.id)];
+      }
+      setQuestions(questions);
+      setCurrentIndex(0);
+      return;
+    }
+
+    // Get daily pulse first
+    const today = new Date().toISOString().split('T')[0];
     const { data: dailyPulse } = await supabase
       .from('questions')
       .select('*')
       .eq('is_daily_pulse', true)
+      .eq('daily_pulse_date', today)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
-    // Get questions not yet voted on
+    // Build query for regular questions
     let query = supabase
       .from('questions')
       .select('*')
       .eq('status', 'active');
 
-    // Apply geo filter based on preference
+    // Apply geo filter
     if (userData.geo_preference === 'global') {
       query = query.eq('geo_scope', 'global');
     } else if (userData.geo_preference === 'country' && userData.geo_country) {
-      query = query.eq('geo_scope', 'country').eq('geo_country', userData.geo_country);
-    } else if (userData.geo_preference === 'mixed') {
-      // Random order for mixed
-      query = query.order('total_votes', { ascending: false });
+      query = query.or(`geo_scope.eq.global,and(geo_scope.eq.country,geo_country.eq.${userData.geo_country})`);
+    } else if (userData.geo_preference === 'region' && userData.geo_region) {
+      query = query.or(`geo_scope.eq.global,and(geo_scope.eq.region,geo_region.eq.${userData.geo_region})`);
     }
 
-    const { data: allQuestions } = await query.limit(30);
+    query = query.order('total_votes', { ascending: false }).limit(30);
+    const { data: allQuestions } = await query;
 
-    // Filter out already voted questions
+    // Filter out voted questions
     const { data: votedQuestions } = await supabase
       .from('votes')
       .select('question_id')
@@ -140,7 +231,7 @@ export default function SwipeScreen() {
 
     const votedIds = new Set((votedQuestions || []).map(v => v.question_id));
 
-    // Filter out archived questions
+    // Filter out archived
     const { data: archivedQuestions } = await supabase
       .from('user_archives')
       .select('question_id')
@@ -152,7 +243,7 @@ export default function SwipeScreen() {
       q => !votedIds.has(q.id) && !archivedIds.has(q.id)
     );
 
-    // Add daily pulse at the beginning if not voted
+    // Add daily pulse at the beginning (INV-14)
     if (dailyPulse && !votedIds.has(dailyPulse.id) && !archivedIds.has(dailyPulse.id)) {
       filteredQuestions = [dailyPulse, ...filteredQuestions.filter(q => q.id !== dailyPulse.id)];
     }
@@ -166,6 +257,25 @@ export default function SwipeScreen() {
   // Handle vote submission
   async function submitVote(voteValue: 'yes' | 'no' | 'skip' | 'deep_dive') {
     if (!user || !currentQuestion) return;
+
+    const netState = await NetInfo.fetch();
+
+    if (!netState.isConnected) {
+      // Queue vote offline
+      await queueVote({
+        questionId: currentQuestion.id,
+        voteValue,
+        membershipType: user.membership_type,
+        isVerified: user.is_verified,
+        geoCountry: user.geo_country,
+        geoPreference: user.geo_preference,
+      });
+      
+      // Remove from local cache
+      await removeFromCache(currentQuestion.id);
+      advanceToNext();
+      return;
+    }
 
     try {
       // Insert vote
@@ -190,7 +300,6 @@ export default function SwipeScreen() {
           .single();
 
         if (updated) {
-          // Check threshold
           const threshold = RESULT_THRESHOLDS[user.membership_type as keyof typeof RESULT_THRESHOLDS] || 500;
           
           if (updated.total_votes >= threshold) {
@@ -207,6 +316,7 @@ export default function SwipeScreen() {
             setTimeout(() => {
               setShowResult(false);
               setResultData(null);
+              checkWirksamkeit();
               advanceToNext();
             }, 3000);
             return;
@@ -214,9 +324,47 @@ export default function SwipeScreen() {
         }
       }
 
+      // Check Wirksamkeit (after 100 votes)
+      await checkWirksamkeit();
       advanceToNext();
     } catch (error) {
       console.error('Error submitting vote:', error);
+    }
+  }
+
+  async function checkWirksamkeit() {
+    if (!user || user.wirksamkeit_shown) return;
+
+    try {
+      const session = await getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/get-wirksamkeit`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+      
+      if (result.shouldShowOverlay) {
+        setWirksamkeitData({
+          totalVotes: result.totalVotes,
+          effectiveVotes: result.effectiveVotes,
+          effectivenessPct: result.effectivenessPct,
+        });
+        setShowWirksamkeit(true);
+        
+        // Update local state
+        setUser(prev => prev ? { ...prev, wirksamkeit_shown: true } : null);
+      }
+    } catch (error) {
+      console.error('Wirksamkeit check error:', error);
     }
   }
 
@@ -238,26 +386,22 @@ export default function SwipeScreen() {
   // Handle swipe completion
   const handleSwipeComplete = useCallback(async (direction: 'left' | 'right' | 'up' | 'down') => {
     if (direction === 'right') {
-      // YES
       setFlashColor(COLORS.yesLight);
       await hapticPatterns.yes();
       await playSound('yes');
       setTimeout(() => setFlashColor(null), ANIMATIONS.flash);
       await submitVote('yes');
     } else if (direction === 'left') {
-      // NO
       setFlashColor(COLORS.noLight);
       await hapticPatterns.no();
       await playSound('no');
       setTimeout(() => setFlashColor(null), ANIMATIONS.flash);
       await submitVote('no');
     } else if (direction === 'down') {
-      // BOTTOM SHEET
       await hapticPatterns.archive();
       await playSound('archive');
       setShowBottomSheet(true);
     } else if (direction === 'up') {
-      // CLOUD MENU
       await hapticPatterns.cloud();
       await playSound('deepDive');
       setShowCloudMenu(true);
@@ -280,24 +424,19 @@ export default function SwipeScreen() {
     .onEnd((event) => {
       const { translationX, translationY, velocityX, velocityY } = event;
 
-      // Determine swipe direction
       if (Math.abs(translationX) > SWIPE_THRESHOLD || Math.abs(velocityX) > 500) {
-        // Horizontal swipe
         const direction = translationX > 0 ? 'right' : 'left';
         translateX.value = withSpring(direction === 'right' ? SCREEN_WIDTH : -SCREEN_WIDTH, {
           velocity: velocityX,
         });
         runOnJS(handleSwipeComplete)(direction);
       } else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
-        // Swipe up
         translateY.value = withSpring(-SCREEN_HEIGHT, { velocity: velocityY });
         runOnJS(handleSwipeComplete)('up');
       } else if (translationY > SWIPE_THRESHOLD || velocityY > 500) {
-        // Swipe down
         translateY.value = withSpring(SCREEN_HEIGHT / 3, { velocity: velocityY });
         runOnJS(handleSwipeComplete)('down');
       } else {
-        // Reset
         translateX.value = withSpring(0);
         translateY.value = withSpring(0);
         rotation.value = withSpring(0);
@@ -322,14 +461,12 @@ export default function SwipeScreen() {
   async function loadAIContent() {
     if (!currentQuestion) return;
 
-    // Check cache first
     if (currentQuestion.ai_context_cache) {
       setAIContent(currentQuestion.ai_context_cache);
       return;
     }
 
     // TODO: Call AI endpoint for fresh content
-    // For now, show placeholder
     setAIContent({
       title: currentQuestion.word,
       sentence: 'AI-generierte Fakten werden geladen...',
@@ -379,12 +516,14 @@ export default function SwipeScreen() {
     advanceToNext();
   }
 
-  // Handle "show later" action
   function handleShowLater() {
-    // Store in local state with 5-minute timer
-    // Zero DB writes (INV-12)
     setShowBottomSheet(false);
     advanceToNext();
+  }
+
+  function handleReportAbuse() {
+    setShowBottomSheet(false);
+    setShowAbuseReport(true);
   }
 
   if (isLoading) {
@@ -410,11 +549,21 @@ export default function SwipeScreen() {
     );
   }
 
-  const wordLength = currentQuestion.word.length - 1; // Exclude #
+  const wordLength = currentQuestion.word.length - 1;
   const fontSize = getWordFontSize(wordLength);
+  const isDailyPulse = currentQuestion.is_daily_pulse;
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Offline indicator */}
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            📴 Offline – Stimmen werden gespeichert ({pendingCount} wartend)
+          </Text>
+        </View>
+      )}
+
       {/* Flash overlay */}
       {flashColor && (
         <View style={[styles.flashOverlay, { backgroundColor: flashColor }]} />
@@ -436,23 +585,29 @@ export default function SwipeScreen() {
       {/* Main card */}
       <GestureDetector gesture={Gesture.Race(panGesture, tapGesture)}>
         <Animated.View style={[styles.card, cardStyle]}>
-          {/* Yes indicator */}
-          <Animated.View style={[styles.voteIndicator, styles.yesIndicator, yesIndicatorStyle]}>
-            <Text style={styles.voteIndicatorText}>{t('swipe.yes')}</Text>
-          </Animated.View>
+          {isDailyPulse ? (
+            <DailyPulseCard word={currentQuestion.word} style={StyleSheet.absoluteFill} />
+          ) : (
+            <>
+              {/* Yes indicator */}
+              <Animated.View style={[styles.voteIndicator, styles.yesIndicator, yesIndicatorStyle]}>
+                <Text style={styles.voteIndicatorText}>{t('swipe.yes')}</Text>
+              </Animated.View>
 
-          {/* No indicator */}
-          <Animated.View style={[styles.voteIndicator, styles.noIndicator, noIndicatorStyle]}>
-            <Text style={styles.voteIndicatorText}>{t('swipe.no')}</Text>
-          </Animated.View>
+              {/* No indicator */}
+              <Animated.View style={[styles.voteIndicator, styles.noIndicator, noIndicatorStyle]}>
+                <Text style={styles.voteIndicatorText}>{t('swipe.no')}</Text>
+              </Animated.View>
 
-          {/* Question word */}
-          <Text style={[styles.wordText, { fontSize }]}>
-            {currentQuestion.word}
-          </Text>
+              {/* Question word */}
+              <Text style={[styles.wordText, { fontSize }]}>
+                {currentQuestion.word}
+              </Text>
 
-          {/* Tap hint */}
-          <Text style={styles.tapHint}>?</Text>
+              {/* Tap hint */}
+              <Text style={styles.tapHint}>?</Text>
+            </>
+          )}
 
           {/* AI Overlay */}
           {showAIOverlay && aiContent && (
@@ -500,6 +655,11 @@ export default function SwipeScreen() {
               <Text style={styles.sheetOptionIcon}>🗑️</Text>
               <Text style={styles.sheetOptionText}>{t('swipe.archive')}</Text>
             </TouchableOpacity>
+            {/* Abuse report option */}
+            <TouchableOpacity style={styles.sheetOption} onPress={handleReportAbuse}>
+              <Text style={styles.sheetOptionIcon}>⚠️</Text>
+              <Text style={[styles.sheetOptionText, { color: COLORS.no }]}>Melden</Text>
+            </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.sheetOption, styles.sheetCancel]}
               onPress={() => setShowBottomSheet(false)}
@@ -533,6 +693,21 @@ export default function SwipeScreen() {
           </View>
         </View>
       )}
+
+      {/* Wirksamkeit Overlay */}
+      <WirksamkeitOverlay
+        visible={showWirksamkeit}
+        onDismiss={() => setShowWirksamkeit(false)}
+        data={wirksamkeitData}
+      />
+
+      {/* Abuse Report Sheet */}
+      <AbuseReportSheet
+        visible={showAbuseReport}
+        onClose={() => setShowAbuseReport(false)}
+        questionId={currentQuestion.id}
+        questionWord={currentQuestion.word}
+      />
     </SafeAreaView>
   );
 }
@@ -568,6 +743,17 @@ const styles = StyleSheet.create({
   reloadButtonText: {
     color: COLORS.white,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  offlineBanner: {
+    backgroundColor: COLORS.goldLight,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: COLORS.gold,
     fontWeight: '600',
   },
   flashOverlay: {

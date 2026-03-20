@@ -1,0 +1,124 @@
+<analysis>**original_problem_statement:** 
+The user wants to build a production-ready full-stack mobile and web application called RAWLZ (Tagline: Wischen, wählen, verstehen.). 
+**PRODUCT REQUIREMENTS & CONSTRAINTS:**
+- **Strict Tech Stack:** Mobile App must be React Native + Expo. Backend must be Supabase (PostgreSQL + Auth + Edge Functions). Web Admin/B2B must be React + TypeScript.
+- **CRITICAL DEVIATION:** The default Emergent template (FastAPI + MongoDB) MUST NOT BE USED. 
+- All data schemas, CRON jobs, Edge Functions, and app configurations are strictly defined in a comprehensive Master Prompt.
+- Development is split into strictly sequential phases.
+
+**User's preferred language**: **GERMAN** (Next agent MUST respond in German).
+
+**what currently exists?** 
+Phase 1 (Core DB, Edge Functions, Mobile Auth, and Swipe Screen) has been fully implemented via code generation and approved by the user. The default FastAPI/MongoDB template was abandoned in favor of a new  and  directory structure. The agent just began Phase 2 (Search, History, Suggestion, and Settings screens) and has created initial files for these tabs.
+
+**Last working item**:
+- **Last item agent was working:** Implementing Phase 2 frontend screens for the React Native mobile app (, , ).
+- **Status:** IN PROGRESS
+- **Agent Testing Done:** N
+- **Which testing method agent to use?** Frontend testing agent (for React Native components) and manual curl tests for Supabase Edge Functions (assuming a Supabase instance is configured).
+- **User Testing Done:** N
+
+**All Pending/In progress Issue list**: 
+No bugs identified yet, as the code is in the initial generation phase.
+
+**In progress Task List**:
+- Task 1: Complete Phase 2 Mobile Screens
+    - **Where to resume:** Continue modifying , , and  to include all features requested in User Message 38.
+    - **What will be achieved with this?** Full implementation of the Search & History Dashboard, Suggestion Autocomplete, and Settings notifications.
+    - **Status:** IN PROGRESS
+    - **Should Test frontend/backend/both after fix?** Frontend.
+    - **Blocked on something:** None.
+
+**Upcoming and Future Tasks**:
+*Upcoming Tasks (Phase 2 - P0):*
+- Deploy  (EF-02) logic with Expo Push.
+- Implement 'Vergleichs-Modus' (Comparison Mode) in the Search tab with timeseries charts (max 5 questions).
+- Implement 'Meinungs-Kompass' (Opinion Compass) tab (unlocked after 50 votes).
+- Implement Daily Pulse Card logic (must be the first card in the feed).
+- Implement 'Wirksamkeits-Anzeige' (Effectiveness overlay triggered after 100 votes).
+- Implement Abuse Reporting UI on swipe cards.
+- Implement 3 Share Cards components (MoodCard, MyVoteCard, ChartCard) at 1080x1080px.
+- Finalize Offline Queue logic in .
+
+*Future Tasks (Phase 3+ - P1):*
+- Build Web Admin Panel () using React + TS.
+- Build B2B Web Dashboard () using React + TS.
+- Integrate Stripe checkout Edge Functions.
+- Create PDF Report Generation Edge Function.
+
+**Completed work in this session**:
+- Ignored default FastAPI/Mongo template; created  and  directories.
+- Phase 1 Backend: Supabase schema (), CRON jobs ().
+- Phase 1 Edge Functions: Admin login, TOTP setup/verify, auth check, logout, manage user, change vote, tag question.
+- Phase 1 Mobile: Expo initialization, i18n, haptics, auth flows, swipe screen UI.
+- Phase 2 Start: Created base structure for , , .
+
+**Earlier issues found/mentioned but not fixed**:
+- None.
+
+**Known issue recurrence from previous fork**:
+- N/A (First fork)
+
+**Code Architecture**:
+
+
+**Key Technical Concepts**:
+React Native, Expo, Supabase (PostgreSQL, Auth, Edge Functions), React Navigation (expo-router), i18n. NO FastAPI. NO MongoDB.
+
+**key DB schema**:
+- : {id, device_hash, membership_type, trust_score, is_verified}
+- : {id, word, status, yes_count, no_count, total_votes, ai_tags}
+- : {id, question_id, user_id, vote_value}
+- : {id, user_id, stripe_customer_id, subscription_status}
+- : {id, email, role, totp_secret}
+
+**changes in tech stack**:
+- **MASSIVE CHANGE:** Abandoned the standard Emergent platform template (FastAPI + MongoDB). The entire project is strictly Supabase (Postgres) and React Native (Expo). 
+
+**All files of reference**:
+-  &  (Core DB logic)
+-  &  (Mobile config)
+-  (Currently being worked on)
+-  (Currently being worked on)
+
+**Areas that need refactoring**:
+- The UI components within the React Native app will need careful styling to adhere strictly to the Minimalist · High-Contrast · Light Mode First design system defined in the master prompt.
+
+**key api endpoints**:
+- All APIs are Supabase Edge Functions located in  (e.g., , ).
+
+**Critical Info for New Agent**:
+- **LANGUAGE:** You MUST reply to the user in **German**.
+- **TECH STACK ALERT:** Do NOT touch or attempt to run , MongoDB, or the default . Work EXCLUSIVELY inside  and .
+- **KEYS:** The user explicitly requested to use **placeholder keys** for Supabase, Stripe, and RevenueCat in the  files for now. Do not block development waiting for real keys.
+- **LLM:** Use the Emergent LLM Key for  integration as agreed with the user.
+
+**documents and test reports created in this job**:
+- None
+
+**Last 10 User Messages and any pending HUMAN messages**:
+- *Message 38:* User confirms Phase 1 is perfect. Provides a massive checklist to build Phase 2 completely (Search/History, Suggestion, Settings, Daily Pulse, Effectiveness overlay, Abuse reporting, Share cards, Offline queue).
+- *Message 11:* User confirms the agent's plan (Ja).
+- *Message 5:* User clarifies requirements: use placeholder keys for Supabase/Stripe, use Emergent LLM key, STRICTLY separate React Native/Supabase structure (no FastAPI/Mongo), and execute Phase 1 first.
+- *Message 2:* Start the task now
+
+**Project Health Check**:
+- Mocked/In-Transition. Code for Phase 1 backend is written as SQL and Deno functions, but a local Supabase instance is not running in this container environment by default. Mobile UI requires Expo to run.
+
+**3rd Party Integrations**:
+- OpenAI GPT-4o-mini — uses Emergent LLM Key (for AI Fact overlays)
+- Supabase (DB/Auth/Edge Functions) — requires User API Key (using placeholders for now)
+- Stripe (Payments) — requires User API Key (using placeholders for now)
+- RevenueCat (In-App Purchases) — requires User API Key (using placeholders for now)
+
+**Testing status**:
+- Testing agent used after significant changes: NO
+- Troubleshoot agent used after agent stuck in loop: NO
+- Test files created: None
+- Known regressions: None
+
+**Credentials to test flow**:
+- Using placeholder credentials as requested by the user.
+
+**What agent forgot to execute**:
+- The agent just started Phase 2 and needs to carefully read **User Message 38** to implement the remaining Phase 2 requirements (Share Cards, Vergleichs-Modus, Meinungs-Kompass, Daily Pulse logic, etc.).</analysis>
