@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "RAWLZ",
+    "slug": "rawlz",
+    "scheme": "rawlz",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "bundleIdentifier": "app.rawlz.mobile",
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "RAWLZ benötigt Kamera-Zugriff für QR-Code-Scanning.",
+        "NSPhotoLibraryUsageDescription": "RAWLZ benötigt Foto-Zugriff zum Speichern von Share-Cards."
+      }
+    },
+    "android": {
+      "package": "app.rawlz.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "rawlz"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1A1A2E"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}

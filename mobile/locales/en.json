@@ -1,0 +1,202 @@
+{
+  "app": {
+    "name": "RAWLZ",
+    "tagline": "Swipe, vote, understand."
+  },
+  "swipe": {
+    "yes": "YES",
+    "no": "NO",
+    "skip": "Skip",
+    "deep_dive": "Learn more",
+    "result": "{{yes}}% for · {{no}}% against · {{total}} votes",
+    "threshold_gate": "Results visible at {{threshold}} votes",
+    "later": "Show later (5 min.)",
+    "archive": "Archive",
+    "cancel": "Cancel",
+    "cloud_search": "Search",
+    "cloud_suggest": "Suggest",
+    "cloud_results": "Results",
+    "hint_swipe_left": "← NO",
+    "hint_swipe_right": "YES →",
+    "hint_swipe_down": "↓ Options",
+    "hint_swipe_up": "↑ More",
+    "daily_pulse": "Daily Pulse",
+    "no_more_questions": "No more questions available",
+    "vote_locked": "Locked for {{seconds}} sec.",
+    "vote_changeable": "Change",
+    "vote_changed": "Your vote has been changed"
+  },
+  "ai": {
+    "title": "AI Facts",
+    "source": "Source: AI-generated · No political stance",
+    "loading": "Loading facts...",
+    "error": "Could not load facts"
+  },
+  "wirksamkeit": {
+    "title": "Your Impact",
+    "message": "Your vote helped reach the threshold in {{count}} cases.",
+    "dismiss": "Got it"
+  },
+  "settings": {
+    "title": "Settings",
+    "account": "My Account",
+    "membership": "Membership",
+    "language": "Language",
+    "sounds": "Sounds",
+    "notifications": "Notifications",
+    "my_questions": "My Question Notifications",
+    "feed_mode": "Feed Mode",
+    "profile": "My Profile",
+    "legal": "Legal",
+    "delete_account": "Delete Account",
+    "delete_account_confirm": "Do you really want to delete your account? This action cannot be undone.",
+    "password_reset": "Reset Password",
+    "version": "Version",
+    "privacy_policy": "Privacy Policy",
+    "imprint": "Imprint",
+    "terms": "Terms of Use"
+  },
+  "feed_mode": {
+    "global": "Global",
+    "country": "My Country",
+    "region": "My Region",
+    "mixed": "Mixed"
+  },
+  "membership": {
+    "basis": "Basic",
+    "supporter": "Supporter",
+    "expert": "Expert",
+    "lobby": "Lobby",
+    "supporter_cta": "Support RAWLZ",
+    "supporter_price": "€1",
+    "supporter_benefits": "Results at 100 votes, reduced threshold for suggestions",
+    "restore_purchase": "Already purchased? Restore",
+    "supporter_since": "Supporter since {{date}}",
+    "expert_vouches": "{{count}} vouches",
+    "expert_2fa": "2FA enabled",
+    "lobby_manage_billing": "Manage billing"
+  },
+  "suggest": {
+    "title": "Suggest a Question",
+    "placeholder": "#Topic",
+    "already_live": "This question is already live.",
+    "vote_now": "Vote now →",
+    "notify_toggle": "Notify me when {{word}} goes live.",
+    "remaining": "{{count}} more submissions until activation",
+    "submit": "Submit",
+    "success": "Successfully submitted!",
+    "error": "Error submitting",
+    "invalid_word": "Invalid word. Only letters and numbers allowed.",
+    "geo_scope": "Geographic scope"
+  },
+  "search": {
+    "title": "Search",
+    "placeholder": "Search for questions...",
+    "no_results": "No results found",
+    "archived": "Archived",
+    "reactivate": "Reactivate",
+    "pending": "{{count}}x suggested"
+  },
+  "history": {
+    "title": "My Votes",
+    "no_votes": "You haven't voted yet",
+    "changed_from": "Changed from {{from}} to {{to}}"
+  },
+  "comparison": {
+    "title": "Comparison",
+    "select_questions": "Select questions (2-5)",
+    "compare": "Compare",
+    "clear": "Clear selection",
+    "selected": "{{count}} selected",
+    "max_reached": "Maximum reached (5)",
+    "share": "Share as image",
+    "save": "Save",
+    "saved_comparisons": "Saved comparisons"
+  },
+  "compass": {
+    "title": "Opinion Compass",
+    "locked": "Unlocked after 50 yes/no votes",
+    "votes_needed": "{{count}} more votes needed",
+    "not_enough_calibrated": "Not enough calibrated questions answered yet. Answer more questions to calculate your compass.",
+    "quadrant_liberal_market": "Liberal-Market",
+    "quadrant_liberal_social": "Liberal-Social",
+    "quadrant_conservative_market": "Conservative-Market",
+    "quadrant_conservative_social": "Conservative-Social",
+    "share": "Share"
+  },
+  "notifications": {
+    "title": "My Question Notifications",
+    "empty": "No questions subscribed. Suggest a word and subscribe to notifications.",
+    "unsubscribe": "Unsubscribe",
+    "submissions_needed": "{{count}} more submissions needed",
+    "activated": "Activated"
+  },
+  "profile": {
+    "title": "My Profile",
+    "demographics": "Demographic Data",
+    "privacy_notice": "Only evaluated anonymously. Never identifiable as an individual. Can be deleted at any time (GDPR Art. 17).",
+    "skip": "Skip",
+    "trust_bonus": "+{{bonus}} Trust Score",
+    "age_group": "Age Group",
+    "gender": "Gender",
+    "education": "Education Level",
+    "employment": "Employment",
+    "income": "Income",
+    "location": "Location",
+    "political": "Political Interest"
+  },
+  "auth": {
+    "title": "Sign In",
+    "sign_in_apple": "Sign in with Apple",
+    "sign_in_google": "Sign in with Google",
+    "sign_in_email": "Sign in with Email",
+    "email": "Email",
+    "password": "Password",
+    "confirm_password": "Confirm Password",
+    "sign_in": "Sign In",
+    "sign_up": "Sign Up",
+    "switch_to_signup": "New here? Sign up",
+    "switch_to_signin": "Already registered? Sign in",
+    "forgot_password": "Forgot password?",
+    "reset_sent": "Reset link sent. Check your email (including spam folder).",
+    "new_password": "New Password",
+    "update_password": "Update Password",
+    "gdpr_consent": "I agree to the Privacy Policy and am at least 16 years old.",
+    "gdpr_required": "Please accept the Privacy Policy",
+    "passwords_mismatch": "Passwords do not match",
+    "password_too_short": "Password must be at least 8 characters",
+    "invalid_email": "Invalid email address",
+    "verification_sent": "Verification email sent. Please check your inbox."
+  },
+  "errors": {
+    "network": "No connection. Please check your internet.",
+    "generic": "An error occurred. ({{code}})",
+    "auth_failed": "Authentication failed",
+    "load_failed": "Loading failed",
+    "save_failed": "Save failed",
+    "try_again": "Try again"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "done": "Done",
+    "next": "Next",
+    "back": "Back",
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "votes": "votes"
+  },
+  "time": {
+    "just_now": "Just now",
+    "minutes_ago": "{{count}} min. ago",
+    "hours_ago": "{{count}} hr. ago",
+    "yesterday": "Yesterday",
+    "days_ago": "{{count}} days ago"
+  }
+}

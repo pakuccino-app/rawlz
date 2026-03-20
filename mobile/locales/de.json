@@ -1,0 +1,202 @@
+{
+  "app": {
+    "name": "RAWLZ",
+    "tagline": "Wischen, wählen, verstehen."
+  },
+  "swipe": {
+    "yes": "JA",
+    "no": "NEIN",
+    "skip": "Überspringen",
+    "deep_dive": "Mehr erfahren",
+    "result": "{{yes}}% dafür · {{no}}% dagegen · {{total}} Stimmen",
+    "threshold_gate": "Ergebnis sichtbar ab {{threshold}} Stimmen",
+    "later": "Später anzeigen (5 Min.)",
+    "archive": "Archivieren",
+    "cancel": "Abbrechen",
+    "cloud_search": "Suche",
+    "cloud_suggest": "Vorschlagen",
+    "cloud_results": "Ergebnisse",
+    "hint_swipe_left": "← NEIN",
+    "hint_swipe_right": "JA →",
+    "hint_swipe_down": "↓ Optionen",
+    "hint_swipe_up": "↑ Mehr",
+    "daily_pulse": "Täglicher Puls",
+    "no_more_questions": "Keine weiteren Fragen verfügbar",
+    "vote_locked": "Gesperrt noch {{seconds}} Sek.",
+    "vote_changeable": "Ändern",
+    "vote_changed": "Deine Stimme wurde geändert"
+  },
+  "ai": {
+    "title": "KI-Fakten",
+    "source": "Quelle: KI-generiert · Kein politischer Standpunkt",
+    "loading": "Lade Fakten...",
+    "error": "Fakten konnten nicht geladen werden"
+  },
+  "wirksamkeit": {
+    "title": "Deine Wirksamkeit",
+    "message": "Deine Stimme hat in {{count}} Fällen dazu beigetragen, die Stimmschwelle zu knacken.",
+    "dismiss": "Verstanden"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "account": "Mein Konto",
+    "membership": "Mitgliedschaft",
+    "language": "Sprache",
+    "sounds": "Sounds",
+    "notifications": "Benachrichtigungen",
+    "my_questions": "Meine Fragen-Benachrichtigungen",
+    "feed_mode": "Feed-Modus",
+    "profile": "Mein Profil",
+    "legal": "Rechtliches",
+    "delete_account": "Konto löschen",
+    "delete_account_confirm": "Möchtest du dein Konto wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "password_reset": "Passwort zurücksetzen",
+    "version": "Version",
+    "privacy_policy": "Datenschutzerklärung",
+    "imprint": "Impressum",
+    "terms": "Nutzungsbedingungen"
+  },
+  "feed_mode": {
+    "global": "Global",
+    "country": "Mein Land",
+    "region": "Meine Region",
+    "mixed": "Gemischt"
+  },
+  "membership": {
+    "basis": "Basis",
+    "supporter": "Supporter",
+    "expert": "Experte",
+    "lobby": "Lobby",
+    "supporter_cta": "RAWLZ unterstützen",
+    "supporter_price": "€1",
+    "supporter_benefits": "Ergebnisse ab 100 Stimmen, reduzierte Schwelle für Vorschläge",
+    "restore_purchase": "Bereits gekauft? Wiederherstellen",
+    "supporter_since": "Supporter seit {{date}}",
+    "expert_vouches": "{{count}} Vouches",
+    "expert_2fa": "2FA aktiviert",
+    "lobby_manage_billing": "Rechnungen verwalten"
+  },
+  "suggest": {
+    "title": "Frage vorschlagen",
+    "placeholder": "#Thema",
+    "already_live": "Diese Frage ist bereits live.",
+    "vote_now": "Jetzt abstimmen →",
+    "notify_toggle": "Benachrichtige mich, wenn {{word}} freigeschaltet wird.",
+    "remaining": "Noch {{count}} Einreichungen bis zur Freischaltung",
+    "submit": "Einreichen",
+    "success": "Erfolgreich eingereicht!",
+    "error": "Fehler beim Einreichen",
+    "invalid_word": "Ungültiges Wort. Nur Buchstaben und Zahlen erlaubt.",
+    "geo_scope": "Geografischer Bereich"
+  },
+  "search": {
+    "title": "Suche",
+    "placeholder": "Suche nach Fragen...",
+    "no_results": "Keine Ergebnisse gefunden",
+    "archived": "Archiviert",
+    "reactivate": "Reaktivieren",
+    "pending": "{{count}}x vorgeschlagen"
+  },
+  "history": {
+    "title": "Meine Stimmen",
+    "no_votes": "Du hast noch keine Stimmen abgegeben",
+    "changed_from": "Geändert von {{from}} zu {{to}}"
+  },
+  "comparison": {
+    "title": "Vergleich",
+    "select_questions": "Fragen auswählen (2-5)",
+    "compare": "Vergleichen",
+    "clear": "Auswahl aufheben",
+    "selected": "{{count}} ausgewählt",
+    "max_reached": "Maximum erreicht (5)",
+    "share": "Als Bild teilen",
+    "save": "Speichern",
+    "saved_comparisons": "Gespeicherte Vergleiche"
+  },
+  "compass": {
+    "title": "Meinungs-Kompass",
+    "locked": "Freigeschaltet nach 50 Ja/Nein-Stimmen",
+    "votes_needed": "Noch {{count}} Stimmen nötig",
+    "not_enough_calibrated": "Noch nicht genug kalibrierte Fragen beantwortet. Mehr Fragen beantworten, um deinen Kompass zu berechnen.",
+    "quadrant_liberal_market": "Liberal-Markt",
+    "quadrant_liberal_social": "Liberal-Sozial",
+    "quadrant_conservative_market": "Konservativ-Markt",
+    "quadrant_conservative_social": "Konservativ-Sozial",
+    "share": "Teilen"
+  },
+  "notifications": {
+    "title": "Meine Fragen-Benachrichtigungen",
+    "empty": "Keine Fragen abonniert. Schlage ein Wort vor und abonniere Benachrichtigungen.",
+    "unsubscribe": "Abbestellen",
+    "submissions_needed": "Noch {{count}} Einreichungen nötig",
+    "activated": "Freigeschaltet"
+  },
+  "profile": {
+    "title": "Mein Profil",
+    "demographics": "Demografische Daten",
+    "privacy_notice": "Nur anonymisiert ausgewertet. Niemals als Einzelperson identifizierbar. Jederzeit löschbar (DSGVO Art. 17).",
+    "skip": "Überspringen",
+    "trust_bonus": "+{{bonus}} Trust Score",
+    "age_group": "Altersgruppe",
+    "gender": "Geschlecht",
+    "education": "Bildungsabschluss",
+    "employment": "Beschäftigung",
+    "income": "Einkommen",
+    "location": "Wohnort",
+    "political": "Politisches Interesse"
+  },
+  "auth": {
+    "title": "Anmelden",
+    "sign_in_apple": "Mit Apple anmelden",
+    "sign_in_google": "Mit Google anmelden",
+    "sign_in_email": "Mit E-Mail anmelden",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "confirm_password": "Passwort bestätigen",
+    "sign_in": "Anmelden",
+    "sign_up": "Registrieren",
+    "switch_to_signup": "Neu hier? Registrieren",
+    "switch_to_signin": "Bereits registriert? Anmelden",
+    "forgot_password": "Passwort vergessen?",
+    "reset_sent": "Reset-Link gesendet. Prüfe deine E-Mails (auch Spam-Ordner).",
+    "new_password": "Neues Passwort",
+    "update_password": "Passwort aktualisieren",
+    "gdpr_consent": "Ich stimme der Datenschutzerklärung zu und bin mindestens 16 Jahre alt.",
+    "gdpr_required": "Bitte akzeptiere die Datenschutzerklärung",
+    "passwords_mismatch": "Passwörter stimmen nicht überein",
+    "password_too_short": "Passwort muss mindestens 8 Zeichen haben",
+    "invalid_email": "Ungültige E-Mail-Adresse",
+    "verification_sent": "Bestätigungsmail gesendet. Bitte prüfe deine E-Mails."
+  },
+  "errors": {
+    "network": "Keine Verbindung. Bitte prüfe deine Internetverbindung.",
+    "generic": "Ein Fehler ist aufgetreten. ({{code}})",
+    "auth_failed": "Anmeldung fehlgeschlagen",
+    "load_failed": "Laden fehlgeschlagen",
+    "save_failed": "Speichern fehlgeschlagen",
+    "try_again": "Erneut versuchen"
+  },
+  "common": {
+    "loading": "Laden...",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "confirm": "Bestätigen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "done": "Fertig",
+    "next": "Weiter",
+    "back": "Zurück",
+    "close": "Schließen",
+    "yes": "Ja",
+    "no": "Nein",
+    "ok": "OK",
+    "votes": "Stimmen"
+  },
+  "time": {
+    "just_now": "Gerade eben",
+    "minutes_ago": "vor {{count}} Min.",
+    "hours_ago": "vor {{count}} Std.",
+    "yesterday": "Gestern",
+    "days_ago": "vor {{count}} Tagen"
+  }
+}
