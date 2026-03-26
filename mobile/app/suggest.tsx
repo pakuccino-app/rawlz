@@ -1,32 +1,45 @@
 // app/suggest.tsx
-// Question suggestion screen with complete autocomplete
+// Question suggestion screen with autocomplete
+// # prefilled and not deletable, max 27 chars after #
+// 200ms debounce, server-side search
+// Dropdown: "✅ Bereits live" | "⏳ X/Y – Noch Z nötig"
+// Confirmation card after submit
+// 🔔 Toggle only for pending/new words
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   ScrollView,
-  Keyboard,
   ActivityIndicator,
+  Alert,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
-import { Switch } from 'react-native';
 
-import { COLORS, WORD_REGEX, WORD_MAX_LENGTH } from '../lib/constants';
-import { supabase, getCurrentUser } from '../lib/supabase';
+import { COLORS } from '../lib/constants';
+import { supabase, getCurrentUser, getSession } from '../lib/supabase';
 import hapticPatterns from '../lib/haptics';
 
-interface AutocompleteItem {
+interface AutocompleteResult {
   id: string;
   word: string;
-  status: 'active' | 'pending';
+  status: 'active' | 'pending' | 'blocked';
   submission_count: number;
   relevance_threshold: number;
+}
+
+interface User {
+  id: string;
+  membership_type: string;
+  is_verified: boolean;
+  geo_country?: string;
+  geo_region?: string;
 }
 
 type GeoScope = 'global' | 'country' | 'region';
@@ -34,410 +47,411 @@ type GeoScope = 'global' | 'country' | 'region';
 export default function SuggestScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  
-  const [wordInput, setWordInput] = useState('#');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [autocompleteResults, setAutocompleteResults] = useState<AutocompleteItem[]>([]);
-  const [showAutocomplete, setShowAutocomplete] = useState(false);
-  const [selectedWord, setSelectedWord] = useState<AutocompleteItem | null>(null);
-  const [geoScope, setGeoScope] = useState<GeoScope>('global');
-  const [notifyOnActivate, setNotifyOnActivate] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userLanguage, setUserLanguage] = useState('de');
-  const [userGeoCountry, setUserGeoCountry] = useState<string | null>(null);
-  const [userGeoRegion, setUserGeoRegion] = useState<string | null>(null);
-  const [isVerified, setIsVerified] = useState(false);
-  
-  // Submission result state
-  const [showResult, setShowResult] = useState(false);
-  const [resultQuestion, setResultQuestion] = useState<any>(null);
-
-  const autocompleteDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [user, setUser] = useState<User | null>(null);
+  const [word, setWord] = useState('#');
+  const [geoScope, setGeoScope] = useState<GeoScope>('global');
+  const [notifyOnActivate, setNotifyOnActivate] = useState(true);
+  
+  const [autocompleteResults, setAutocompleteResults] = useState<AutocompleteResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<{
+    success: boolean;
+    alreadyActive?: boolean;
+    question?: any;
+    remainingCount?: number;
+  } | null>(null);
 
   useEffect(() => {
-    loadUserData();
+    loadUser();
   }, []);
 
-  async function loadUserData() {
-    const user = await getCurrentUser();
-    if (user) {
-      setUserId(user.id);
-      
+  async function loadUser() {
+    const authUser = await getCurrentUser();
+    if (authUser) {
       const { data } = await supabase
         .from('users')
-        .select('language_code, geo_country, geo_region, is_verified')
-        .eq('id', user.id)
+        .select('id, membership_type, is_verified, geo_country, geo_region')
+        .eq('id', authUser.id)
         .single();
-      
-      if (data) {
-        setUserLanguage(data.language_code);
-        setUserGeoCountry(data.geo_country);
-        setUserGeoRegion(data.geo_region);
-        setIsVerified(data.is_verified);
-      }
+      setUser(data);
     }
   }
 
-  // Handle word input change with autocomplete
+  // Word validation (INV-01)
+  function isValidWord(w: string): boolean {
+    const wordOnly = w.replace(/^#/, '');
+    return /^[a-zA-Z0-9äöüÄÖÜß]{1,27}$/.test(wordOnly);
+  }
+
   function handleWordChange(text: string) {
-    // Ensure # is always at the start and can't be removed
+    // Ensure # is always at the start
     if (!text.startsWith('#')) {
       text = '#' + text.replace(/#/g, '');
     }
-    
-    // Limit to max 28 chars (# + 27)
-    if (text.length > WORD_MAX_LENGTH) {
-      text = text.slice(0, WORD_MAX_LENGTH);
+
+    // Limit to 28 chars total (# + 27)
+    if (text.length > 28) {
+      text = text.slice(0, 28);
     }
-    
-    // Remove invalid characters
-    const cleanText = '#' + text.slice(1).replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '');
-    setWordInput(cleanText);
-    setSelectedWord(null);
-    
-    // Debounce autocomplete (200ms)
-    if (autocompleteDebounceRef.current) {
-      clearTimeout(autocompleteDebounceRef.current);
+
+    setWord(text);
+    setSubmitResult(null);
+
+    // Debounced autocomplete search
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
-    
-    if (cleanText.length > 1) {
-      autocompleteDebounceRef.current = setTimeout(() => {
-        fetchAutocomplete(cleanText);
+
+    const wordOnly = text.replace(/^#/, '');
+    if (wordOnly.length >= 2) {
+      debounceRef.current = setTimeout(() => {
+        performAutocomplete(wordOnly);
       }, 200);
     } else {
       setAutocompleteResults([]);
-      setShowAutocomplete(false);
+      setShowDropdown(false);
     }
   }
 
-  async function fetchAutocomplete(query: string) {
-    setIsLoading(true);
+  async function performAutocomplete(query: string) {
+    setIsSearching(true);
+    setShowDropdown(true);
+
     try {
-      // Server-side query on active+pending only (INV-20)
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('questions')
         .select('id, word, status, submission_count, relevance_threshold')
+        .ilike('word', `#${query}%`)
         .in('status', ['active', 'pending'])
-        .ilike('word', `${query}%`)
-        .eq('language_code', userLanguage)
-        .order('status', { ascending: true }) // active first
-        .order('submission_count', { ascending: false })
-        .limit(8);
+        .order('total_votes', { ascending: false })
+        .limit(5);
 
+      if (error) throw error;
       setAutocompleteResults(data || []);
-      setShowAutocomplete((data || []).length > 0);
     } catch (error) {
       console.error('Autocomplete error:', error);
+      setAutocompleteResults([]);
     } finally {
-      setIsLoading(false);
+      setIsSearching(false);
     }
   }
 
-  function selectAutocompleteItem(item: AutocompleteItem) {
-    hapticPatterns.tap();
-    setWordInput(item.word);
-    setSelectedWord(item);
-    setShowAutocomplete(false);
+  function selectAutocompleteItem(item: AutocompleteResult) {
+    setWord(item.word);
+    setShowDropdown(false);
     Keyboard.dismiss();
+
+    if (item.status === 'active') {
+      // Show "already live" message
+      setSubmitResult({
+        success: true,
+        alreadyActive: true,
+        question: item,
+      });
+    }
   }
 
   async function handleSubmit() {
-    if (!userId || wordInput.length < 2) return;
-    
-    // Validate word format
-    if (!WORD_REGEX.test(wordInput)) {
-      hapticPatterns.error();
+    if (!user) {
+      Alert.alert('Fehler', 'Nicht angemeldet');
+      return;
+    }
+
+    const wordOnly = word.replace(/^#/, '');
+    if (!isValidWord(word)) {
+      Alert.alert('Fehler', t('suggest.invalid_word'));
       return;
     }
 
     setIsSubmitting(true);
+    await hapticPatterns.tap();
+
     try {
-      await hapticPatterns.tap();
+      const session = await getSession();
+      if (!session) {
+        throw new Error('Keine Session');
+      }
 
-      // Check if it's an existing question
-      const { data: existing } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('word', wordInput)
-        .eq('language_code', userLanguage)
-        .single();
-
-      if (existing) {
-        if (existing.status === 'active') {
-          // Already live - show message
-          setResultQuestion(existing);
-          setShowResult(true);
-          return;
-        } else if (existing.status === 'pending') {
-          // Increment submission count
-          await supabase
-            .from('questions')
-            .update({ submission_count: existing.submission_count + 1 })
-            .eq('id', existing.id);
-
-          // Handle notification subscription
-          if (notifyOnActivate) {
-            await supabase.from('question_notification_requests').upsert({
-              user_id: userId,
-              question_id: existing.id,
-            }, { onConflict: 'user_id,question_id' });
-          }
-
-          // Refresh question data
-          const { data: updated } = await supabase
-            .from('questions')
-            .select('*')
-            .eq('id', existing.id)
-            .single();
-
-          setResultQuestion(updated);
-          setShowResult(true);
-          await hapticPatterns.success();
-          return;
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/submit-question`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            word: word,
+            languageCode: 'de',
+            geoScope,
+            geoCountry: geoScope === 'country' ? user.geo_country : undefined,
+            geoRegion: geoScope === 'region' ? user.geo_region : undefined,
+            notifyOnActivate: notifyOnActivate && !submitResult?.alreadyActive,
+          }),
         }
+      );
+
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      // Create new question
-      const threshold = isVerified ? 30 : 50; // Supporters get lower threshold
-
-      const { data: newQuestion, error } = await supabase
-        .from('questions')
-        .insert({
-          word: wordInput,
-          language_code: userLanguage,
-          geo_scope: geoScope,
-          geo_country: geoScope === 'country' ? userGeoCountry : null,
-          geo_region: geoScope === 'region' ? userGeoRegion : null,
-          status: 'pending',
-          submission_count: 1,
-          relevance_threshold: threshold,
-          submitted_by: userId,
-          submitted_by_verified: isVerified,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Handle notification subscription
-      if (notifyOnActivate && newQuestion) {
-        await supabase.from('question_notification_requests').insert({
-          user_id: userId,
-          question_id: newQuestion.id,
-        });
-      }
-
-      setResultQuestion(newQuestion);
-      setShowResult(true);
       await hapticPatterns.success();
+
+      const question = result.question;
+      const remaining = question.relevance_threshold - question.submission_count;
+
+      setSubmitResult({
+        success: true,
+        alreadyActive: result.alreadyActive || question.status === 'active',
+        question,
+        remainingCount: Math.max(0, remaining),
+      });
 
     } catch (error: any) {
       console.error('Submit error:', error);
       await hapticPatterns.error();
+      Alert.alert('Fehler', error.message || t('suggest.error'));
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  function handleVoteNow() {
-    if (resultQuestion) {
-      // Navigate to swipe screen with this question
-      router.push({
-        pathname: '/(tabs)',
-        params: { questionId: resultQuestion.id },
-      });
+  function handleGoToVote() {
+    if (submitResult?.question?.id) {
+      router.push(`/(tabs)?questionId=${submitResult.question.id}`);
     }
   }
 
-  function resetForm() {
-    setWordInput('#');
-    setSelectedWord(null);
-    setShowResult(false);
-    setResultQuestion(null);
-    setNotifyOnActivate(false);
+  function handleNewSuggestion() {
+    setWord('#');
+    setSubmitResult(null);
+    setAutocompleteResults([]);
     inputRef.current?.focus();
   }
 
-  // ========================
-  // RENDER: Result Card
-  // ========================
-  if (showResult && resultQuestion) {
-    const isActive = resultQuestion.status === 'active';
-    const remaining = resultQuestion.relevance_threshold - resultQuestion.submission_count;
-    const progressPct = Math.min(100, (resultQuestion.submission_count / resultQuestion.relevance_threshold) * 100);
+  // Calculate threshold based on user membership
+  const threshold = (user?.is_verified || ['supporter', 'expert', 'lobby'].includes(user?.membership_type || ''))
+    ? 30
+    : 50;
 
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.resultContainer}>
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView 
+        style={styles.scrollView}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>{t('suggest.title')}</Text>
+        </View>
+
+        {/* Result card (shown after submit) */}
+        {submitResult ? (
           <View style={styles.resultCard}>
-            {isActive ? (
+            {submitResult.alreadyActive ? (
               <>
                 <Text style={styles.resultIcon}>✅</Text>
                 <Text style={styles.resultTitle}>{t('suggest.already_live')}</Text>
-                <Text style={styles.resultWord}>{resultQuestion.word}</Text>
-                <TouchableOpacity style={styles.voteNowButton} onPress={handleVoteNow}>
+                <Text style={styles.resultWord}>{submitResult.question?.word}</Text>
+                <TouchableOpacity
+                  style={styles.voteNowButton}
+                  onPress={handleGoToVote}
+                >
                   <Text style={styles.voteNowButtonText}>{t('suggest.vote_now')}</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={styles.resultIcon}>✓</Text>
+                <Text style={styles.resultIcon}>🎉</Text>
                 <Text style={styles.resultTitle}>{t('suggest.success')}</Text>
-                <Text style={styles.resultWord}>{resultQuestion.word}</Text>
+                <Text style={styles.resultWord}>{submitResult.question?.word}</Text>
                 
                 {/* Progress bar */}
                 <View style={styles.progressContainer}>
                   <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${Math.min(100, (submitResult.question?.submission_count / submitResult.question?.relevance_threshold) * 100)}%`,
+                        },
+                      ]}
+                    />
                   </View>
                   <Text style={styles.progressText}>
-                    {resultQuestion.submission_count} / {resultQuestion.relevance_threshold}
+                    {submitResult.question?.submission_count} / {submitResult.question?.relevance_threshold}
                   </Text>
                 </View>
-                
+
                 <Text style={styles.remainingText}>
-                  {t('suggest.remaining', { count: Math.max(0, remaining) })}
+                  {t('suggest.remaining', { count: submitResult.remainingCount })}
                 </Text>
+
+                {/* Notification status */}
+                {notifyOnActivate && (
+                  <View style={styles.notifyBadge}>
+                    <Text style={styles.notifyBadgeText}>
+                      🔔 Du wirst benachrichtigt
+                    </Text>
+                  </View>
+                )}
               </>
             )}
-          </View>
 
-          <TouchableOpacity style={styles.newSuggestionButton} onPress={resetForm}>
-            <Text style={styles.newSuggestionButtonText}>
-              {t('suggest.title')} →
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ========================
-  // RENDER: Main Form
-  // ========================
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.title}>{t('suggest.title')}</Text>
-
-        {/* Word input */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            value={wordInput}
-            onChangeText={handleWordChange}
-            placeholder={t('suggest.placeholder')}
-            placeholderTextColor={COLORS.gray500}
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={WORD_MAX_LENGTH}
-          />
-          {isLoading && (
-            <ActivityIndicator style={styles.inputLoader} size="small" color={COLORS.gray500} />
-          )}
-        </View>
-
-        {/* Character counter */}
-        <Text style={styles.charCounter}>
-          {wordInput.length - 1} / 27
-        </Text>
-
-        {/* Autocomplete dropdown */}
-        {showAutocomplete && (
-          <View style={styles.autocompleteContainer}>
-            {autocompleteResults.map(item => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.autocompleteItem}
-                onPress={() => selectAutocompleteItem(item)}
-              >
-                <Text style={styles.autocompleteWord}>{item.word}</Text>
-                {item.status === 'active' ? (
-                  <Text style={styles.autocompleteActive}>✅ {t('suggest.already_live').split('.')[0]}</Text>
-                ) : (
-                  <Text style={styles.autocompletePending}>
-                    ⏳ {item.submission_count}/{item.relevance_threshold} — {t('suggest.remaining', { 
-                      count: item.relevance_threshold - item.submission_count 
-                    })}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* Geo scope selector */}
-        <Text style={styles.sectionTitle}>{t('suggest.geo_scope')}</Text>
-        <View style={styles.geoOptions}>
-          {(['global', 'country', 'region'] as GeoScope[]).map(scope => (
             <TouchableOpacity
-              key={scope}
-              style={[
-                styles.geoOption,
-                geoScope === scope && styles.geoOptionActive,
-              ]}
-              onPress={() => {
-                hapticPatterns.tap();
-                setGeoScope(scope);
-              }}
+              style={styles.newSuggestionButton}
+              onPress={handleNewSuggestion}
             >
-              <Text style={styles.geoOptionIcon}>
-                {scope === 'global' && '🌍'}
-                {scope === 'country' && '🏳️'}
-                {scope === 'region' && '📍'}
-              </Text>
-              <Text style={[
-                styles.geoOptionText,
-                geoScope === scope && styles.geoOptionTextActive,
-              ]}>
-                {t(`feed_mode.${scope}`)}
+              <Text style={styles.newSuggestionButtonText}>
+                Neuen Vorschlag machen
               </Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          </View>
+        ) : (
+          <>
+            {/* Input section */}
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>{t('suggest.placeholder')}</Text>
+              
+              <View style={styles.inputContainer}>
+                <TextInput
+                  ref={inputRef}
+                  style={styles.input}
+                  value={word}
+                  onChangeText={handleWordChange}
+                  placeholder="#Thema"
+                  placeholderTextColor={COLORS.gray300}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={28}
+                />
+                <Text style={styles.charCount}>
+                  {word.length - 1}/27
+                </Text>
+              </View>
 
-        {/* Notification toggle - only for pending/new words */}
-        {(!selectedWord || selectedWord.status === 'pending') && (
-          <View style={styles.notifyContainer}>
-            <View style={styles.notifyTextContainer}>
-              <Text style={styles.notifyIcon}>🔔</Text>
-              <Text style={styles.notifyText}>
-                {t('suggest.notify_toggle', { word: wordInput })}
+              {/* Autocomplete dropdown */}
+              {showDropdown && (
+                <View style={styles.dropdown}>
+                  {isSearching ? (
+                    <View style={styles.dropdownLoading}>
+                      <ActivityIndicator size="small" color={COLORS.black} />
+                    </View>
+                  ) : autocompleteResults.length > 0 ? (
+                    autocompleteResults.map(item => (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={styles.dropdownItem}
+                        onPress={() => selectAutocompleteItem(item)}
+                      >
+                        <Text style={styles.dropdownWord}>{item.word}</Text>
+                        {item.status === 'active' ? (
+                          <Text style={styles.dropdownStatusLive}>✅ Bereits live</Text>
+                        ) : (
+                          <Text style={styles.dropdownStatusPending}>
+                            ⏳ {item.submission_count}/{item.relevance_threshold} – Noch {item.relevance_threshold - item.submission_count} nötig
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={styles.dropdownEmpty}>
+                      <Text style={styles.dropdownEmptyText}>
+                        Keine Treffer – neu vorschlagen?
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Geo scope selection */}
+            <View style={styles.geoSection}>
+              <Text style={styles.sectionLabel}>{t('suggest.geo_scope')}</Text>
+              <View style={styles.geoOptions}>
+                {(['global', 'country', 'region'] as GeoScope[]).map(scope => (
+                  <TouchableOpacity
+                    key={scope}
+                    style={[
+                      styles.geoOption,
+                      geoScope === scope && styles.geoOptionSelected,
+                    ]}
+                    onPress={() => setGeoScope(scope)}
+                    disabled={scope === 'country' && !user?.geo_country}
+                  >
+                    <Text
+                      style={[
+                        styles.geoOptionText,
+                        geoScope === scope && styles.geoOptionTextSelected,
+                        scope === 'country' && !user?.geo_country && styles.geoOptionDisabled,
+                      ]}
+                    >
+                      {scope === 'global' ? '🌍 Global' :
+                       scope === 'country' ? '🏳️ Land' : '📍 Region'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Notification toggle (only for pending/new) */}
+            {word.length > 1 && (
+              <TouchableOpacity
+                style={styles.notifyToggle}
+                onPress={() => setNotifyOnActivate(!notifyOnActivate)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  notifyOnActivate && styles.checkboxChecked,
+                ]}>
+                  {notifyOnActivate && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={styles.notifyText}>
+                  {t('suggest.notify_toggle', { word: word })}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Threshold info */}
+            <View style={styles.infoBox}>
+              <Text style={styles.infoText}>
+                Schwelle: {threshold} Einreichungen zur Aktivierung
+                {user?.is_verified && ' (Verifiziert: reduziert)'}
+                {['supporter', 'expert', 'lobby'].includes(user?.membership_type || '') && ' (Mitgliedschaft: reduziert)'}
               </Text>
             </View>
-            <Switch
-              value={notifyOnActivate}
-              onValueChange={(value) => {
-                hapticPatterns.tap();
-                setNotifyOnActivate(value);
-              }}
-              trackColor={{ false: COLORS.gray300, true: COLORS.black }}
-            />
-          </View>
-        )}
 
-        {/* Submit button */}
-        <TouchableOpacity
-          style={[
-            styles.submitButton,
-            (wordInput.length < 2 || isSubmitting) && styles.submitButtonDisabled,
-          ]}
-          onPress={handleSubmit}
-          disabled={wordInput.length < 2 || isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color={COLORS.white} />
-          ) : (
-            <Text style={styles.submitButtonText}>{t('suggest.submit')}</Text>
-          )}
-        </TouchableOpacity>
+            {/* Submit button */}
+            <TouchableOpacity
+              style={[
+                styles.submitButton,
+                (!isValidWord(word) || isSubmitting) && styles.submitButtonDisabled,
+              ]}
+              onPress={handleSubmit}
+              disabled={!isValidWord(word) || isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <Text style={styles.submitButtonText}>{t('suggest.submit')}</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -450,81 +464,113 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  scrollContent: {
     padding: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: COLORS.black,
   },
   title: {
     fontSize: 28,
     fontWeight: '800',
     color: COLORS.black,
-    marginBottom: 32,
+  },
+  inputSection: {
+    marginBottom: 24,
+    position: 'relative',
+    zIndex: 10,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    marginBottom: 8,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.gray300,
+    backgroundColor: COLORS.gray100,
     borderRadius: 16,
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: 20,
   },
   input: {
     flex: 1,
-    height: 64,
+    height: 60,
     fontSize: 24,
     fontWeight: '700',
     color: COLORS.black,
   },
-  inputLoader: {
-    marginLeft: 8,
-  },
-  charCounter: {
-    textAlign: 'right',
-    fontSize: 12,
+  charCount: {
+    fontSize: 14,
     color: COLORS.gray500,
-    marginTop: 8,
-    marginRight: 8,
   },
-  autocompleteContainer: {
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
+    borderRadius: 16,
+    marginTop: 4,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 5,
+    maxHeight: 300,
+    overflow: 'hidden',
   },
-  autocompleteItem: {
+  dropdownLoading: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  dropdownItem: {
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
   },
-  autocompleteWord: {
-    fontSize: 16,
-    fontWeight: '600',
+  dropdownWord: {
+    fontSize: 18,
+    fontWeight: '700',
     color: COLORS.black,
     marginBottom: 4,
   },
-  autocompleteActive: {
-    fontSize: 12,
+  dropdownStatusLive: {
+    fontSize: 14,
     color: COLORS.yes,
   },
-  autocompletePending: {
-    fontSize: 12,
+  dropdownStatusPending: {
+    fontSize: 14,
     color: COLORS.gold,
   },
-  sectionTitle: {
+  dropdownEmpty: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  dropdownEmptyText: {
     fontSize: 14,
-    fontWeight: '600',
     color: COLORS.gray500,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: 32,
-    marginBottom: 16,
+  },
+  geoSection: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    marginBottom: 12,
   },
   geoOptions: {
     flexDirection: 'row',
@@ -532,59 +578,73 @@ const styles = StyleSheet.create({
   },
   geoOption: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: COLORS.gray100,
+    alignItems: 'center',
   },
-  geoOptionActive: {
+  geoOptionSelected: {
     backgroundColor: COLORS.black,
-  },
-  geoOptionIcon: {
-    fontSize: 18,
-    marginRight: 6,
   },
   geoOptionText: {
     fontSize: 14,
     color: COLORS.black,
     fontWeight: '500',
   },
-  geoOptionTextActive: {
+  geoOptionTextSelected: {
     color: COLORS.white,
   },
-  notifyContainer: {
+  geoOptionDisabled: {
+    color: COLORS.gray300,
+  },
+  notifyToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 32,
+    marginBottom: 24,
     padding: 16,
     backgroundColor: COLORS.gray100,
     borderRadius: 12,
   },
-  notifyTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 16,
-  },
-  notifyIcon: {
-    fontSize: 20,
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: COLORS.gray300,
     marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.gold,
+    borderColor: COLORS.gold,
+  },
+  checkmark: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '700',
   },
   notifyText: {
+    flex: 1,
     fontSize: 14,
     color: COLORS.gray700,
-    flex: 1,
+  },
+  infoBox: {
+    backgroundColor: COLORS.gray100,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  infoText: {
+    fontSize: 13,
+    color: COLORS.gray500,
+    lineHeight: 20,
   },
   submitButton: {
     backgroundColor: COLORS.black,
-    paddingVertical: 18,
     borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
-    marginTop: 32,
   },
   submitButtonDisabled: {
     backgroundColor: COLORS.gray300,
@@ -594,46 +654,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  // Result styles
-  resultContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
+
+  // Result card styles
   resultCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.gray100,
     borderRadius: 24,
     padding: 32,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
   },
   resultIcon: {
     fontSize: 48,
     marginBottom: 16,
   },
   resultTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
     color: COLORS.black,
     marginBottom: 8,
   },
   resultWord: {
     fontSize: 32,
-    fontWeight: '800',
+    fontWeight: '900',
     color: COLORS.black,
     marginBottom: 24,
   },
   progressContainer: {
     width: '100%',
-    alignItems: 'center',
+    marginBottom: 16,
   },
   progressBar: {
-    width: '100%',
     height: 12,
-    backgroundColor: COLORS.gray100,
+    backgroundColor: COLORS.gray300,
     borderRadius: 6,
     overflow: 'hidden',
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
@@ -642,34 +696,48 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 14,
-    color: COLORS.gray700,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  remainingText: {
-    fontSize: 14,
     color: COLORS.gray500,
-    marginTop: 16,
     textAlign: 'center',
   },
+  remainingText: {
+    fontSize: 16,
+    color: COLORS.gray700,
+    marginBottom: 16,
+  },
+  notifyBadge: {
+    backgroundColor: COLORS.goldLight,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 24,
+  },
+  notifyBadgeText: {
+    fontSize: 14,
+    color: COLORS.gold,
+    fontWeight: '600',
+  },
   voteNowButton: {
-    backgroundColor: COLORS.black,
-    paddingVertical: 14,
+    backgroundColor: COLORS.yes,
+    paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
+    marginBottom: 16,
   },
   voteNowButtonText: {
     color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
   },
   newSuggestionButton: {
-    alignItems: 'center',
-    marginTop: 24,
-    padding: 16,
+    backgroundColor: COLORS.white,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 8,
   },
   newSuggestionButtonText: {
+    color: COLORS.black,
     fontSize: 16,
-    color: COLORS.gray500,
+    fontWeight: '600',
   },
 });

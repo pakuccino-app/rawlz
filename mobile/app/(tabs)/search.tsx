@@ -1,176 +1,365 @@
 // app/(tabs)/search.tsx
-// Search & History Dashboard - Complete with all 4 tabs
+// Search & History Dashboard with 4 tabs
+// Tab 1: Meine Stimmen (vote history with change option)
+// Tab 2: Suche (ILIKE search with archived reactivate)
+// Tab 3: Vergleich (comparison mode with charts)
+// Tab 4: Meinungs-Kompass (opinion compass)
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
+  TouchableOpacity,
   TextInput,
   FlatList,
-  TouchableOpacity,
-  StyleSheet,
+  ScrollView,
   ActivityIndicator,
+  Alert,
   Dimensions,
-  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { LineChart } from 'react-native-gifted-charts';
 
-import { COLORS, RESULT_THRESHOLDS, VOTE_LOCK_MS } from '../../lib/constants';
-import { supabase, getCurrentUser } from '../../lib/supabase';
+import { COLORS, RESULT_THRESHOLDS } from '../../lib/constants';
+import { supabase, getCurrentUser, getSession } from '../../lib/supabase';
 import hapticPatterns from '../../lib/haptics';
+import { calculateKompass, KompassResult } from '../../lib/kompass';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const TABS = ['history', 'search', 'comparison', 'compass'] as const;
+type TabType = typeof TABS[number];
 
-type TabType = 'votes' | 'search' | 'compare' | 'compass';
+// Chart colors for comparison mode
+const CHART_COLORS = ['#16A34A', '#2563EB', '#D4AF37', '#DC2626', '#6B7280'];
 
-interface Vote {
+interface VoteHistoryItem {
   id: string;
   question_id: string;
-  vote_value: string;
+  vote_value: 'yes' | 'no' | 'skip' | 'deep_dive';
   voted_at: string;
+  can_change: boolean;
+  seconds_until_unlock: number;
   question: {
-    id: string;
     word: string;
     yes_count: number;
     no_count: number;
     total_votes: number;
   };
-  history?: VoteHistoryEntry[];
-}
-
-interface VoteHistoryEntry {
-  old_value: string;
-  new_value: string;
-  changed_at: string;
+  previous_vote?: string;
+  changed_at?: string;
 }
 
 interface SearchResult {
   id: string;
   word: string;
-  status: string;
+  status: 'active' | 'pending' | 'blocked';
   yes_count: number;
   no_count: number;
   total_votes: number;
   submission_count: number;
   relevance_threshold: number;
-  isArchived?: boolean;
+  is_archived?: boolean;
+}
+
+interface ComparisonQuestion {
+  id: string;
+  word: string;
+  yes_count: number;
+  no_count: number;
+  total_votes: number;
+  timeseries?: { day: string; yes_pct: number }[];
 }
 
 interface SavedComparison {
   id: string;
-  name: string;
   question_ids: string[];
   created_at: string;
+  questions: { word: string }[];
 }
 
-interface TimeseriesPoint {
-  day: string;
-  yes_pct: number;
+interface User {
+  id: string;
+  membership_type: string;
 }
-
-interface CompassData {
-  x: number;
-  y: number;
-  calibratedVotes: number;
-}
-
-// Comparison chart colors
-const CHART_COLORS = ['#16A34A', '#2563EB', '#D4AF37', '#DC2626', '#6B7280'];
 
 export default function SearchScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>('votes');
+  const chartRef = useRef<ViewShot>(null);
+
+  const [activeTab, setActiveTab] = useState<TabType>('history');
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // History tab state
+  const [voteHistory, setVoteHistory] = useState<VoteHistoryItem[]>([]);
+  const [historyRefreshing, setHistoryRefreshing] = useState(false);
+
+  // Search tab state
   const [searchQuery, setSearchQuery] = useState('');
-  const [votes, setVotes] = useState<Vote[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [membershipType, setMembershipType] = useState('basis');
-  const [selectedForComparison, setSelectedForComparison] = useState<string[]>([]);
-  const [comparisonQuestions, setComparisonQuestions] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Comparison tab state
+  const [selectedQuestions, setSelectedQuestions] = useState<ComparisonQuestion[]>([]);
+  const [availableQuestions, setAvailableQuestions] = useState<ComparisonQuestion[]>([]);
   const [savedComparisons, setSavedComparisons] = useState<SavedComparison[]>([]);
-  const [timeseriesData, setTimeseriesData] = useState<{ [key: string]: TimeseriesPoint[] }>({});
-  const [showComparisonView, setShowComparisonView] = useState(false);
-  const [compassData, setCompassData] = useState<CompassData | null>(null);
-  const [compassUnlocked, setCompassUnlocked] = useState(false);
+  const [showTimeseries, setShowTimeseries] = useState(true);
+
+  // Compass tab state
+  const [kompassResult, setKompassResult] = useState<KompassResult | null>(null);
+  const [kompassUnlocked, setKompassUnlocked] = useState(false);
   const [totalYesNoVotes, setTotalYesNoVotes] = useState(0);
+  const kompassRef = useRef<ViewShot>(null);
 
-  const comparisonViewRef = useRef<ViewShot>(null);
-  const compassViewRef = useRef<ViewShot>(null);
-  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
+  // Load initial data
   useEffect(() => {
-    loadUserData();
+    loadUser();
   }, []);
 
+  // Load tab-specific data when tab changes
   useEffect(() => {
-    if (activeTab === 'votes' && userId) {
-      loadVotes();
-    } else if (activeTab === 'compare' && userId) {
-      loadSavedComparisons();
-    } else if (activeTab === 'compass' && userId) {
-      loadCompassData();
-    }
-  }, [activeTab, userId]);
+    if (!user) return;
 
+    switch (activeTab) {
+      case 'history':
+        loadVoteHistory();
+        break;
+      case 'comparison':
+        loadAvailableQuestions();
+        loadSavedComparisons();
+        break;
+      case 'compass':
+        loadKompassData();
+        break;
+    }
+  }, [activeTab, user]);
+
+  // Auto-refresh history every minute (for vote lock countdown)
   useEffect(() => {
-    if (activeTab === 'search') {
-      // 300ms debounce for search
-      if (searchDebounceRef.current) {
-        clearTimeout(searchDebounceRef.current);
-      }
-      if (searchQuery.length > 0) {
-        searchDebounceRef.current = setTimeout(() => {
-          searchQuestions();
-        }, 300);
-      } else {
-        setSearchResults([]);
-      }
-    }
-    return () => {
-      if (searchDebounceRef.current) {
-        clearTimeout(searchDebounceRef.current);
-      }
-    };
-  }, [searchQuery, activeTab]);
+    if (activeTab !== 'history') return;
+    const interval = setInterval(loadVoteHistory, 60000);
+    return () => clearInterval(interval);
+  }, [activeTab, user]);
 
-  async function loadUserData() {
-    const user = await getCurrentUser();
-    if (user) {
-      setUserId(user.id);
-      
-      const { data } = await supabase
-        .from('users')
-        .select('membership_type')
-        .eq('id', user.id)
-        .single();
-      
-      if (data) {
-        setMembershipType(data.membership_type);
+  async function loadUser() {
+    try {
+      const authUser = await getCurrentUser();
+      if (authUser) {
+        const { data } = await supabase
+          .from('users')
+          .select('id, membership_type')
+          .eq('id', authUser.id)
+          .single();
+        setUser(data);
       }
+    } catch (error) {
+      console.error('Load user error:', error);
+    } finally {
+      setIsLoading(false);
     }
   }
 
-  async function loadVotes() {
-    if (!userId) return;
-    
-    setIsLoading(true);
+  // ==================== HISTORY TAB ====================
+  async function loadVoteHistory() {
+    if (!user) return;
+    setHistoryRefreshing(true);
+
     try {
-      // Get votes with question data
-      const { data: votesData } = await supabase
+      const { data, error } = await supabase
         .from('votes')
         .select(`
           id,
           question_id,
           vote_value,
           voted_at,
-          questions!inner (
+          previous_vote,
+          changed_at,
+          questions (
+            word,
+            yes_count,
+            no_count,
+            total_votes
+          )
+        `)
+        .eq('user_id', user.id)
+        .in('vote_value', ['yes', 'no'])
+        .order('voted_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const now = Date.now();
+      const LOCK_DURATION = 3 * 60 * 1000; // 3 minutes
+
+      const history = (data || []).map((item: any) => {
+        const votedAt = new Date(item.voted_at).getTime();
+        const elapsed = now - votedAt;
+        const canChange = elapsed >= LOCK_DURATION;
+        const secondsUntilUnlock = canChange ? 0 : Math.ceil((LOCK_DURATION - elapsed) / 1000);
+
+        return {
+          ...item,
+          question: item.questions,
+          can_change: canChange,
+          seconds_until_unlock: secondsUntilUnlock,
+        };
+      });
+
+      setVoteHistory(history);
+    } catch (error) {
+      console.error('Load history error:', error);
+    } finally {
+      setHistoryRefreshing(false);
+    }
+  }
+
+  async function handleChangeVote(voteItem: VoteHistoryItem) {
+    if (!voteItem.can_change) {
+      Alert.alert(
+        'Gesperrt',
+        t('swipe.vote_locked', { seconds: voteItem.seconds_until_unlock })
+      );
+      return;
+    }
+
+    const newValue = voteItem.vote_value === 'yes' ? 'no' : 'yes';
+
+    Alert.alert(
+      'Stimme ändern',
+      `Von ${voteItem.vote_value.toUpperCase()} zu ${newValue.toUpperCase()} ändern?`,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.confirm'),
+          onPress: async () => {
+            try {
+              const session = await getSession();
+              if (!session) return;
+
+              const response = await fetch(
+                `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/change-vote`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({
+                    voteId: voteItem.id,
+                    newValue,
+                  }),
+                }
+              );
+
+              const result = await response.json();
+              if (result.success) {
+                await hapticPatterns.success();
+                Alert.alert('Erfolg', t('swipe.vote_changed'));
+                loadVoteHistory();
+              } else {
+                throw new Error(result.error);
+              }
+            } catch (error: any) {
+              Alert.alert('Fehler', error.message);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // ==================== SEARCH TAB ====================
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  function handleSearchChange(text: string) {
+    setSearchQuery(text);
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    if (text.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    searchDebounceRef.current = setTimeout(() => {
+      performSearch(text);
+    }, 200);
+  }
+
+  async function performSearch(query: string) {
+    if (!user) return;
+    setIsSearching(true);
+
+    try {
+      // Search active and pending questions
+      const { data: questions, error } = await supabase
+        .from('questions')
+        .select('*')
+        .or(`word.ilike.%${query}%`)
+        .in('status', ['active', 'pending'])
+        .limit(20);
+
+      if (error) throw error;
+
+      // Get user's archived questions
+      const { data: archives } = await supabase
+        .from('user_archives')
+        .select('question_id')
+        .eq('user_id', user.id);
+
+      const archivedIds = new Set((archives || []).map(a => a.question_id));
+
+      const results = (questions || []).map(q => ({
+        ...q,
+        is_archived: archivedIds.has(q.id),
+      }));
+
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Search error:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  async function handleReactivate(questionId: string) {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('user_archives')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('question_id', questionId);
+
+      await hapticPatterns.success();
+      performSearch(searchQuery);
+    } catch (error) {
+      console.error('Reactivate error:', error);
+    }
+  }
+
+  function handleVoteFromSearch(questionId: string) {
+    router.push(`/(tabs)?questionId=${questionId}`);
+  }
+
+  // ==================== COMPARISON TAB ====================
+  async function loadAvailableQuestions() {
+    if (!user) return;
+
+    try {
+      const { data: votes } = await supabase
+        .from('votes')
+        .select(`
+          question_id,
+          questions (
             id,
             word,
             yes_count,
@@ -178,763 +367,684 @@ export default function SearchScreen() {
             total_votes
           )
         `)
-        .eq('user_id', userId)
-        .order('voted_at', { ascending: false })
-        .limit(50);
+        .eq('user_id', user.id)
+        .in('vote_value', ['yes', 'no'])
+        .limit(100);
 
-      if (votesData) {
-        // Get vote history for each vote
-        const questionIds = votesData.map(v => v.question_id);
-        const { data: historyData } = await supabase
-          .from('vote_history')
-          .select('*')
-          .eq('user_id', userId)
-          .in('question_id', questionIds)
-          .order('changed_at', { ascending: false });
+      const questions = (votes || [])
+        .map((v: any) => v.questions)
+        .filter(Boolean);
 
-        const historyByQuestion: { [key: string]: VoteHistoryEntry[] } = {};
-        (historyData || []).forEach(h => {
-          if (!historyByQuestion[h.question_id]) {
-            historyByQuestion[h.question_id] = [];
-          }
-          historyByQuestion[h.question_id].push({
-            old_value: h.old_value,
-            new_value: h.new_value,
-            changed_at: h.changed_at,
-          });
-        });
-
-        setVotes(votesData.map(v => ({
-          ...v,
-          question: v.questions as any,
-          history: historyByQuestion[v.question_id] || [],
-        })));
-      }
+      setAvailableQuestions(questions);
     } catch (error) {
-      console.error('Error loading votes:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Load questions error:', error);
     }
-  }
-
-  async function searchQuestions() {
-    if (!userId || searchQuery.length < 1) return;
-
-    setIsLoading(true);
-    try {
-      // Search across all geo_scopes with ILIKE
-      const { data: questions } = await supabase
-        .from('questions')
-        .select('*')
-        .or(`status.eq.active,status.eq.pending,status.eq.archived`)
-        .ilike('word', `%${searchQuery}%`)
-        .order('total_votes', { ascending: false })
-        .limit(30);
-
-      // Check which are archived by user
-      const { data: archives } = await supabase
-        .from('user_archives')
-        .select('question_id')
-        .eq('user_id', userId);
-
-      const archivedIds = new Set((archives || []).map(a => a.question_id));
-
-      setSearchResults((questions || []).map(q => ({
-        ...q,
-        isArchived: archivedIds.has(q.id),
-      })));
-    } catch (error) {
-      console.error('Error searching:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function reactivateQuestion(questionId: string) {
-    if (!userId) return;
-
-    await hapticPatterns.tap();
-    await supabase
-      .from('user_archives')
-      .delete()
-      .eq('user_id', userId)
-      .eq('question_id', questionId);
-
-    setSearchResults(prev => 
-      prev.map(q => q.id === questionId ? { ...q, isArchived: false } : q)
-    );
-  }
-
-  function toggleComparisonSelection(questionId: string) {
-    hapticPatterns.tap();
-    setSelectedForComparison(prev => {
-      if (prev.includes(questionId)) {
-        return prev.filter(id => id !== questionId);
-      } else if (prev.length < 5) {
-        return [...prev, questionId];
-      }
-      return prev;
-    });
   }
 
   async function loadSavedComparisons() {
-    if (!userId) return;
+    if (!user) return;
 
-    const { data } = await supabase
-      .from('question_comparisons')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    setSavedComparisons(data || []);
-  }
-
-  async function startComparison() {
-    if (selectedForComparison.length < 2) return;
-
-    setIsLoading(true);
     try {
-      // Load question data
-      const { data: questions } = await supabase
-        .from('questions')
-        .select('*')
-        .in('id', selectedForComparison);
-
-      setComparisonQuestions(questions || []);
-
-      // Load timeseries data for each question (last 30 days)
-      const timeseries: { [key: string]: TimeseriesPoint[] } = {};
-      
-      for (const qId of selectedForComparison) {
-        const { data } = await supabase
-          .from('vote_timeseries')
-          .select('bucket, yes_count, total_count')
-          .eq('question_id', qId)
-          .gte('bucket', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-          .order('bucket', { ascending: true });
-
-        if (data) {
-          // Aggregate by day
-          const byDay: { [key: string]: { yes: number; total: number } } = {};
-          data.forEach(row => {
-            const day = row.bucket.split('T')[0];
-            if (!byDay[day]) byDay[day] = { yes: 0, total: 0 };
-            byDay[day].yes += row.yes_count;
-            byDay[day].total += row.total_count;
-          });
-
-          timeseries[qId] = Object.entries(byDay).map(([day, counts]) => ({
-            day,
-            yes_pct: counts.total > 0 ? Math.round((counts.yes * 100) / counts.total) : 0,
-          }));
-        }
-      }
-
-      setTimeseriesData(timeseries);
-      setShowComparisonView(true);
-    } catch (error) {
-      console.error('Error loading comparison:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function saveComparison() {
-    if (!userId || selectedForComparison.length < 2) return;
-
-    await hapticPatterns.tap();
-    
-    // Check max 10 saved comparisons
-    if (savedComparisons.length >= 10) {
-      // Delete oldest
-      const oldest = savedComparisons[savedComparisons.length - 1];
-      await supabase
+      const { data } = await supabase
         .from('question_comparisons')
-        .delete()
-        .eq('id', oldest.id);
-    }
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-    const name = comparisonQuestions.map(q => q.word).join(' vs ');
-    
-    await supabase.from('question_comparisons').insert({
-      user_id: userId,
-      name,
-      question_ids: selectedForComparison,
-    });
-
-    await loadSavedComparisons();
-    await hapticPatterns.success();
-  }
-
-  async function shareComparison() {
-    if (!comparisonViewRef.current) return;
-
-    try {
-      await hapticPatterns.tap();
-      const uri = await comparisonViewRef.current.capture?.();
-      if (uri) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/jpeg',
-          dialogTitle: t('comparison.share'),
-        });
+      if (data) {
+        // Load question words for each comparison
+        const comparisons = await Promise.all(
+          data.map(async (comp: any) => {
+            const { data: questions } = await supabase
+              .from('questions')
+              .select('word')
+              .in('id', comp.question_ids);
+            return { ...comp, questions: questions || [] };
+          })
+        );
+        setSavedComparisons(comparisons);
       }
     } catch (error) {
-      console.error('Error sharing:', error);
+      console.error('Load comparisons error:', error);
     }
   }
 
-  async function loadCompassData() {
-    if (!userId) return;
+  function toggleQuestionSelection(question: ComparisonQuestion) {
+    const isSelected = selectedQuestions.some(q => q.id === question.id);
 
-    setIsLoading(true);
+    if (isSelected) {
+      setSelectedQuestions(prev => prev.filter(q => q.id !== question.id));
+    } else {
+      if (selectedQuestions.length >= 5) {
+        Alert.alert('Maximum', t('comparison.max_reached'));
+        return;
+      }
+      setSelectedQuestions(prev => [...prev, question]);
+    }
+  }
+
+  async function loadTimeseries() {
+    if (selectedQuestions.length < 2) return;
+
     try {
-      // Check if compass is unlocked (50+ yes/no votes)
-      const { count: voteCount } = await supabase
+      const questionIds = selectedQuestions.map(q => q.id);
+      const { data } = await supabase
+        .from('vote_timeseries')
+        .select('*')
+        .in('question_id', questionIds)
+        .order('snapshot_date', { ascending: true });
+
+      // Group by question
+      const grouped: { [key: string]: { day: string; yes_pct: number }[] } = {};
+      (data || []).forEach((row: any) => {
+        if (!grouped[row.question_id]) {
+          grouped[row.question_id] = [];
+        }
+        const yesPct = row.total > 0 ? Math.round((row.yes_count * 100) / row.total) : 0;
+        grouped[row.question_id].push({
+          day: row.snapshot_date,
+          yes_pct: yesPct,
+        });
+      });
+
+      setSelectedQuestions(prev =>
+        prev.map(q => ({
+          ...q,
+          timeseries: grouped[q.id] || [],
+        }))
+      );
+    } catch (error) {
+      console.error('Timeseries error:', error);
+    }
+  }
+
+  useEffect(() => {
+    if (selectedQuestions.length >= 2) {
+      loadTimeseries();
+    }
+  }, [selectedQuestions.length]);
+
+  function getResultThreshold(): number {
+    const membershipType = user?.membership_type || 'basis';
+    return RESULT_THRESHOLDS[membershipType as keyof typeof RESULT_THRESHOLDS] || 500;
+  }
+
+  function canSeeResults(question: ComparisonQuestion): boolean {
+    return question.total_votes >= getResultThreshold();
+  }
+
+  async function handleSaveComparison() {
+    if (!user || selectedQuestions.length < 2) return;
+
+    // Check max 10 comparisons
+    if (savedComparisons.length >= 10) {
+      Alert.alert('Maximum', 'Du kannst maximal 10 Vergleiche speichern.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('question_comparisons').insert({
+        user_id: user.id,
+        question_ids: selectedQuestions.map(q => q.id),
+      });
+
+      if (error) throw error;
+
+      await hapticPatterns.success();
+      loadSavedComparisons();
+    } catch (error) {
+      console.error('Save comparison error:', error);
+    }
+  }
+
+  async function handleShareComparison() {
+    if (!chartRef.current || selectedQuestions.length < 2) return;
+
+    try {
+      // @ts-ignore
+      const uri = await chartRef.current.capture();
+      await Sharing.shareAsync(uri);
+    } catch (error) {
+      console.error('Share error:', error);
+    }
+  }
+
+  function loadSavedComparison(comparison: SavedComparison) {
+    const questions = availableQuestions.filter(q =>
+      comparison.question_ids.includes(q.id)
+    );
+    setSelectedQuestions(questions);
+  }
+
+  // ==================== COMPASS TAB ====================
+  async function loadKompassData() {
+    if (!user) return;
+
+    try {
+      // Count yes/no votes
+      const { count: yesNoCount } = await supabase
         .from('votes')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('user_id', user.id)
         .in('vote_value', ['yes', 'no']);
 
-      setTotalYesNoVotes(voteCount || 0);
-      setCompassUnlocked((voteCount || 0) >= 50);
+      setTotalYesNoVotes(yesNoCount || 0);
+      setKompassUnlocked((yesNoCount || 0) >= 50);
 
-      if ((voteCount || 0) >= 50) {
-        // Calculate compass position from calibrated questions only
+      if ((yesNoCount || 0) >= 50) {
+        // Get user's votes on calibrated questions
         const { data: votes } = await supabase
           .from('votes')
           .select(`
             vote_value,
             questions!inner (
+              id,
               axis_x,
               axis_y
             )
           `)
-          .eq('user_id', userId)
+          .eq('user_id', user.id)
           .in('vote_value', ['yes', 'no'])
           .not('questions.axis_x', 'is', null)
           .not('questions.axis_y', 'is', null);
 
-        if (votes && votes.length >= 10) {
-          let sumX = 0;
-          let sumY = 0;
+        const calibratedVotes = (votes || []).map((v: any) => ({
+          vote: v.vote_value as 'yes' | 'no',
+          axis_x: v.questions.axis_x,
+          axis_y: v.questions.axis_y,
+        }));
 
-          for (const vote of votes) {
-            const question = vote.questions as any;
-            const multiplier = vote.vote_value === 'yes' ? 1 : -1;
-            sumX += question.axis_x * multiplier;
-            sumY += question.axis_y * multiplier;
-          }
-
-          setCompassData({
-            x: sumX / votes.length,
-            y: sumY / votes.length,
-            calibratedVotes: votes.length,
-          });
+        if (calibratedVotes.length >= 10) {
+          const result = calculateKompass(calibratedVotes);
+          setKompassResult(result);
         } else {
-          setCompassData(null);
+          setKompassResult(null);
         }
       }
     } catch (error) {
-      console.error('Error loading compass:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Kompass error:', error);
     }
   }
 
-  async function shareCompass() {
-    if (!compassViewRef.current) return;
+  async function handleShareKompass() {
+    if (!kompassRef.current || !kompassResult) return;
 
     try {
-      await hapticPatterns.tap();
-      const uri = await compassViewRef.current.capture?.();
-      if (uri) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/jpeg',
-          dialogTitle: t('compass.share'),
-        });
-      }
+      // @ts-ignore
+      const uri = await kompassRef.current.capture();
+      await Sharing.shareAsync(uri);
     } catch (error) {
-      console.error('Error sharing compass:', error);
+      console.error('Share kompass error:', error);
     }
   }
 
-  function getVoteIcon(voteValue: string): string {
-    switch (voteValue) {
-      case 'yes': return '👍';
-      case 'no': return '👎';
-      case 'skip': return '⏭️';
-      case 'deep_dive': return '☁️';
-      default: return '❓';
-    }
-  }
-
-  function isVoteLocked(votedAt: string): boolean {
-    const elapsed = Date.now() - new Date(votedAt).getTime();
-    return elapsed < VOTE_LOCK_MS;
-  }
-
-  function getLockRemainingSeconds(votedAt: string): number {
-    const elapsed = Date.now() - new Date(votedAt).getTime();
-    return Math.max(0, Math.ceil((VOTE_LOCK_MS - elapsed) / 1000));
-  }
-
-  function formatTimeAgo(dateStr: string): string {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffMins < 1) return t('time.just_now');
-    if (diffMins < 60) return t('time.minutes_ago', { count: diffMins });
-    if (diffHours < 24) return t('time.hours_ago', { count: diffHours });
-    if (diffDays === 1) return t('time.yesterday');
-    return t('time.days_ago', { count: diffDays });
-  }
-
-  function getCompassQuadrant(x: number, y: number): string {
-    if (x >= 0 && y >= 0) return t('compass.quadrant_liberal_market');
-    if (x < 0 && y >= 0) return t('compass.quadrant_liberal_social');
-    if (x >= 0 && y < 0) return t('compass.quadrant_conservative_market');
-    return t('compass.quadrant_conservative_social');
-  }
-
-  const threshold = RESULT_THRESHOLDS[membershipType as keyof typeof RESULT_THRESHOLDS] || 500;
-
-  // ========================
-  // RENDER: Vote Item
-  // ========================
-  function renderVoteItem({ item }: { item: Vote }) {
-    const q = item.question;
-    const showResult = q.total_votes >= threshold;
-    const yesPct = showResult ? Math.round((q.yes_count * 100) / q.total_votes) : 0;
-    const locked = isVoteLocked(item.voted_at);
-    const remainingSec = getLockRemainingSeconds(item.voted_at);
-
+  // ==================== RENDER ====================
+  function renderTabBar() {
     return (
-      <View style={styles.voteItem}>
-        <View style={styles.voteHeader}>
-          <Text style={styles.voteWord}>{q.word}</Text>
-          <Text style={styles.voteIcon}>{getVoteIcon(item.vote_value)}</Text>
-        </View>
-        
-        <View style={styles.voteFooter}>
-          <Text style={styles.voteTime}>{formatTimeAgo(item.voted_at)}</Text>
-          
-          {/* Lock indicator - INV-15 */}
-          <View style={styles.lockIndicator}>
-            {locked ? (
-              <Text style={styles.lockLocked}>
-                🔴 {t('swipe.vote_locked', { seconds: remainingSec })}
-              </Text>
-            ) : (
-              <TouchableOpacity>
-                <Text style={styles.lockUnlocked}>
-                  🟢 {t('swipe.vote_changeable')}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {showResult && (
-          <Text style={styles.voteResult}>
-            {yesPct}% {t('swipe.yes')} · {q.total_votes.toLocaleString()} {t('common.votes')}
-          </Text>
-        )}
-
-        {/* Vote history entries */}
-        {item.history && item.history.length > 0 && (
-          <View style={styles.historyContainer}>
-            {item.history.map((h, idx) => (
-              <Text key={idx} style={styles.historyEntry}>
-                {t('history.changed_from', {
-                  from: h.old_value.toUpperCase(),
-                  to: h.new_value.toUpperCase(),
-                })} ({formatTimeAgo(h.changed_at)})
-              </Text>
-            ))}
-          </View>
-        )}
-      </View>
-    );
-  }
-
-  // ========================
-  // RENDER: Search Item
-  // ========================
-  function renderSearchItem({ item }: { item: SearchResult }) {
-    const showResult = item.status === 'active' && item.total_votes >= threshold;
-    const yesPct = showResult ? Math.round((item.yes_count * 100) / item.total_votes) : 0;
-    const isSelected = selectedForComparison.includes(item.id);
-
-    return (
-      <TouchableOpacity
-        style={[styles.searchItem, isSelected && styles.searchItemSelected]}
-        onPress={() => toggleComparisonSelection(item.id)}
-        onLongPress={() => toggleComparisonSelection(item.id)}
-      >
-        <View style={styles.searchHeader}>
-          <Text style={styles.searchWord}>{item.word}</Text>
-          <View style={[
-            styles.statusBadge,
-            item.status === 'active' && styles.statusActive,
-            item.status === 'pending' && styles.statusPending,
-          ]}>
-            <Text style={styles.statusText}>
-              {item.status === 'active' 
-                ? `${item.total_votes.toLocaleString()} ${t('common.votes')}`
-                : t('search.pending', { count: item.submission_count })}
-            </Text>
-          </View>
-        </View>
-
-        {showResult && (
-          <View style={styles.resultBar}>
-            <View style={[styles.resultBarFill, { width: `${yesPct}%` }]} />
-          </View>
-        )}
-
-        {item.isArchived && (
-          <View style={styles.archivedRow}>
-            <Text style={styles.archivedLabel}>{t('search.archived')}</Text>
-            <TouchableOpacity onPress={() => reactivateQuestion(item.id)}>
-              <Text style={styles.reactivateButton}>{t('search.reactivate')}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }
-
-  // ========================
-  // RENDER: Comparison View
-  // ========================
-  function renderComparisonView() {
-    // Prepare chart data
-    const allDays = new Set<string>();
-    Object.values(timeseriesData).forEach(ts => {
-      ts.forEach(p => allDays.add(p.day));
-    });
-    const sortedDays = Array.from(allDays).sort();
-
-    return (
-      <View style={styles.comparisonContainer}>
-        {/* Share card wrapper - collapsable={false} for Android */}
-        <ViewShot
-          ref={comparisonViewRef}
-          options={{ format: 'jpg', quality: 0.9, width: 1080, height: 1080 }}
-          style={styles.shareCard}
-          // @ts-ignore - collapsable for Android screenshot
-          collapsable={false}
-        >
-          {/* Header */}
-          <View style={styles.shareCardHeader}>
-            <Text style={styles.shareCardTitle}>#RAWLZ – {t('comparison.title')}</Text>
-            <Text style={styles.shareCardDate}>
-              {new Date().toLocaleDateString()}
-            </Text>
-          </View>
-
-          {/* Timeseries Chart (top 60%) */}
-          <View style={styles.chartContainer}>
-            {sortedDays.length > 0 && comparisonQuestions.map((q, idx) => {
-              const data = timeseriesData[q.id] || [];
-              const lineData = sortedDays.map(day => {
-                const point = data.find(p => p.day === day);
-                return { value: point?.yes_pct || 0 };
-              });
-
-              return (
-                <View key={q.id} style={styles.chartLine}>
-                  <View style={[styles.chartLegendDot, { backgroundColor: CHART_COLORS[idx] }]} />
-                  <Text style={styles.chartLegendText}>{q.word}</Text>
-                </View>
-              );
-            })}
-            
-            {sortedDays.length > 0 && (
-              <LineChart
-                data={comparisonQuestions.map((q, idx) => ({
-                  data: sortedDays.map(day => {
-                    const point = (timeseriesData[q.id] || []).find(p => p.day === day);
-                    return { value: point?.yes_pct || 0 };
-                  }),
-                  color: CHART_COLORS[idx],
-                }))}
-                width={SCREEN_WIDTH - 80}
-                height={200}
-                spacing={Math.max(10, (SCREEN_WIDTH - 80) / sortedDays.length)}
-                hideDataPoints
-                thickness={2}
-                hideRules
-                yAxisTextStyle={{ color: COLORS.gray500, fontSize: 10 }}
-                xAxisLabelTextStyle={{ color: COLORS.gray500, fontSize: 8 }}
-                maxValue={100}
-                noOfSections={5}
-              />
-            )}
-          </View>
-
-          {/* Totals (bottom 40%) */}
-          <View style={styles.totalsContainer}>
-            {comparisonQuestions.map((q, idx) => {
-              const showResult = q.total_votes >= threshold;
-              const yesPct = showResult ? Math.round((q.yes_count * 100) / q.total_votes) : 0;
-              const noPct = showResult ? 100 - yesPct : 0;
-
-              return (
-                <View key={q.id} style={styles.totalRow}>
-                  <View style={[styles.totalDot, { backgroundColor: CHART_COLORS[idx] }]} />
-                  <Text style={styles.totalWord}>{q.word}</Text>
-                  
-                  {showResult ? (
-                    <>
-                      <View style={styles.totalBarContainer}>
-                        <View style={[styles.totalBarYes, { width: `${yesPct}%` }]} />
-                        <View style={[styles.totalBarNo, { width: `${noPct}%` }]} />
-                      </View>
-                      <Text style={styles.totalText}>
-                        {yesPct}% {t('swipe.yes')} · {q.total_votes.toLocaleString()}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.thresholdText}>
-                      {t('swipe.threshold_gate', { threshold })}
-                    </Text>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Watermark */}
-          <Text style={styles.watermark}>rawlz.app · {new Date().toLocaleDateString()}</Text>
-        </ViewShot>
-
-        {/* Action buttons */}
-        <View style={styles.comparisonActions}>
-          <TouchableOpacity style={styles.actionButton} onPress={shareComparison}>
-            <Text style={styles.actionButtonText}>📤 {t('comparison.share')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={saveComparison}>
-            <Text style={styles.actionButtonText}>💾 {t('comparison.save')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.actionButtonSecondary]}
-            onPress={() => {
-              setShowComparisonView(false);
-              setSelectedForComparison([]);
-            }}
-          >
-            <Text style={styles.actionButtonTextSecondary}>{t('common.close')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // ========================
-  // RENDER: Compass View
-  // ========================
-  function renderCompassView() {
-    if (!compassUnlocked) {
-      return (
-        <View style={styles.compassLocked}>
-          <Text style={styles.compassLockedIcon}>🔒</Text>
-          <Text style={styles.compassLockedText}>{t('compass.locked')}</Text>
-          <Text style={styles.compassProgress}>
-            {t('compass.votes_needed', { count: 50 - totalYesNoVotes })}
-          </Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${(totalYesNoVotes / 50) * 100}%` }]} />
-          </View>
-        </View>
-      );
-    }
-
-    if (!compassData) {
-      return (
-        <View style={styles.compassLocked}>
-          <Text style={styles.compassLockedText}>
-            {t('compass.not_enough_calibrated')}
-          </Text>
-        </View>
-      );
-    }
-
-    // Convert x,y from -1..1 to pixel coordinates
-    const gridSize = SCREEN_WIDTH - 80;
-    const dotX = ((compassData.x + 1) / 2) * gridSize;
-    const dotY = ((1 - compassData.y) / 2) * gridSize; // Invert Y
-
-    return (
-      <View style={styles.compassContainer}>
-        <ViewShot
-          ref={compassViewRef}
-          options={{ format: 'jpg', quality: 0.9, width: 1080, height: 1080 }}
-          style={styles.compassCard}
-          // @ts-ignore
-          collapsable={false}
-        >
-          <Text style={styles.compassTitle}>{t('compass.title')}</Text>
-          
-          {/* 2x2 Grid */}
-          <View style={[styles.compassGrid, { width: gridSize, height: gridSize }]}>
-            {/* Quadrant labels */}
-            <Text style={[styles.quadrantLabel, styles.quadrantTopLeft]}>
-              {t('compass.quadrant_liberal_social')}
-            </Text>
-            <Text style={[styles.quadrantLabel, styles.quadrantTopRight]}>
-              {t('compass.quadrant_liberal_market')}
-            </Text>
-            <Text style={[styles.quadrantLabel, styles.quadrantBottomLeft]}>
-              {t('compass.quadrant_conservative_social')}
-            </Text>
-            <Text style={[styles.quadrantLabel, styles.quadrantBottomRight]}>
-              {t('compass.quadrant_conservative_market')}
-            </Text>
-
-            {/* Axis lines */}
-            <View style={styles.axisHorizontal} />
-            <View style={styles.axisVertical} />
-
-            {/* User dot */}
-            <View style={[styles.compassDot, { left: dotX - 12, top: dotY - 12 }]} />
-          </View>
-
-          <Text style={styles.compassQuadrant}>
-            {getCompassQuadrant(compassData.x, compassData.y)}
-          </Text>
-          
-          <Text style={styles.compassWatermark}>rawlz.app</Text>
-        </ViewShot>
-
-        <TouchableOpacity style={styles.shareCompassButton} onPress={shareCompass}>
-          <Text style={styles.shareCompassButtonText}>📤 {t('compass.share')}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // ========================
-  // MAIN RENDER
-  // ========================
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        {(['votes', 'search', 'compare', 'compass'] as TabType[]).map(tab => (
+      <View style={styles.tabBar}>
+        {TABS.map(tab => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => {
-              setActiveTab(tab);
-              setShowComparisonView(false);
-            }}
+            onPress={() => setActiveTab(tab)}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'votes' && t('history.title')}
-              {tab === 'search' && t('search.title')}
-              {tab === 'compare' && t('comparison.title')}
-              {tab === 'compass' && t('compass.title')}
+              {tab === 'history' ? t('history.title') :
+               tab === 'search' ? t('search.title') :
+               tab === 'comparison' ? t('comparison.title') :
+               t('compass.title')}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+    );
+  }
 
-      {/* Search input */}
-      {activeTab === 'search' && (
-        <View style={styles.searchContainer}>
+  function renderHistoryTab() {
+    if (voteHistory.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>{t('history.no_votes')}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={voteHistory}
+        keyExtractor={item => item.id}
+        refreshing={historyRefreshing}
+        onRefresh={loadVoteHistory}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => {
+          const yesPct = item.question.total_votes > 0
+            ? Math.round((item.question.yes_count * 100) / item.question.total_votes)
+            : 0;
+          const threshold = getResultThreshold();
+          const canSee = item.question.total_votes >= threshold;
+
+          return (
+            <View style={styles.historyItem}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyWord}>{item.question.word}</Text>
+                <View style={[
+                  styles.voteBadge,
+                  item.vote_value === 'yes' ? styles.voteBadgeYes : styles.voteBadgeNo,
+                ]}>
+                  <Text style={styles.voteBadgeText}>
+                    {item.vote_value === 'yes' ? 'JA' : 'NEIN'}
+                  </Text>
+                </View>
+              </View>
+
+              {item.previous_vote && (
+                <Text style={styles.changedText}>
+                  {t('history.changed_from', {
+                    from: item.previous_vote.toUpperCase(),
+                    to: item.vote_value.toUpperCase(),
+                  })}
+                </Text>
+              )}
+
+              {canSee && (
+                <View style={styles.resultBar}>
+                  <View style={[styles.resultBarYes, { width: `${yesPct}%` }]} />
+                  <View style={[styles.resultBarNo, { width: `${100 - yesPct}%` }]} />
+                </View>
+              )}
+
+              <View style={styles.historyFooter}>
+                <Text style={styles.historyMeta}>
+                  {item.question.total_votes.toLocaleString()} {t('common.votes')}
+                </Text>
+
+                {!item.can_change ? (
+                  <View style={styles.lockedBadge}>
+                    <Text style={styles.lockedText}>
+                      🔴 {item.seconds_until_unlock}s
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.changeButton}
+                    onPress={() => handleChangeVote(item)}
+                  >
+                    <Text style={styles.changeButtonText}>
+                      🟢 {t('swipe.vote_changeable')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          );
+        }}
+      />
+    );
+  }
+
+  function renderSearchTab() {
+    return (
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
             placeholder={t('search.placeholder')}
             placeholderTextColor={COLORS.gray500}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={handleSearchChange}
             autoCapitalize="none"
+            autoCorrect={false}
           />
+          {isSearching && <ActivityIndicator size="small" color={COLORS.black} />}
         </View>
-      )}
 
-      {/* Content */}
-      {isLoading ? (
+        {searchResults.length === 0 && searchQuery.length >= 2 && !isSearching ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>{t('search.no_results')}</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={searchResults}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => {
+              const isPending = item.status === 'pending';
+              const progress = isPending
+                ? Math.round((item.submission_count / item.relevance_threshold) * 100)
+                : 0;
+
+              return (
+                <TouchableOpacity
+                  style={[styles.searchItem, item.is_archived && styles.searchItemArchived]}
+                  onPress={() => !item.is_archived && handleVoteFromSearch(item.id)}
+                  disabled={item.is_archived}
+                >
+                  <View style={styles.searchItemHeader}>
+                    <Text style={styles.searchItemWord}>{item.word}</Text>
+                    {item.is_archived && (
+                      <View style={styles.archivedBadge}>
+                        <Text style={styles.archivedText}>{t('search.archived')}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {isPending && (
+                    <View style={styles.progressContainer}>
+                      <View style={styles.progressBar}>
+                        <View style={[styles.progressFill, { width: `${progress}%` }]} />
+                      </View>
+                      <Text style={styles.progressText}>
+                        {t('search.pending', { count: item.submission_count })}
+                      </Text>
+                    </View>
+                  )}
+
+                  {!isPending && !item.is_archived && (
+                    <Text style={styles.searchItemMeta}>
+                      {item.total_votes.toLocaleString()} {t('common.votes')}
+                    </Text>
+                  )}
+
+                  {item.is_archived && (
+                    <TouchableOpacity
+                      style={styles.reactivateButton}
+                      onPress={() => handleReactivate(item.id)}
+                    >
+                      <Text style={styles.reactivateText}>{t('search.reactivate')}</Text>
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        )}
+      </View>
+    );
+  }
+
+  function renderComparisonTab() {
+    const threshold = getResultThreshold();
+
+    return (
+      <ScrollView style={styles.comparisonContainer}>
+        {/* Selection section */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{t('comparison.select_questions')}</Text>
+          <Text style={styles.sectionSubtitle}>
+            {t('comparison.selected', { count: selectedQuestions.length })}
+          </Text>
+        </View>
+
+        {selectedQuestions.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => setSelectedQuestions([])}
+          >
+            <Text style={styles.clearButtonText}>{t('comparison.clear')}</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Available questions */}
+        <View style={styles.questionGrid}>
+          {availableQuestions.slice(0, 20).map((question, idx) => {
+            const isSelected = selectedQuestions.some(q => q.id === question.id);
+            return (
+              <TouchableOpacity
+                key={question.id}
+                style={[
+                  styles.questionChip,
+                  isSelected && styles.questionChipSelected,
+                ]}
+                onPress={() => toggleQuestionSelection(question)}
+              >
+                <Text
+                  style={[
+                    styles.questionChipText,
+                    isSelected && styles.questionChipTextSelected,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {question.word}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Chart section */}
+        {selectedQuestions.length >= 2 && (
+          <ViewShot
+            ref={chartRef}
+            options={{ format: 'jpg', quality: 0.9, width: 1080, height: 1080 }}
+            // @ts-ignore
+            collapsable={false}
+          >
+            <View style={styles.chartContainer}>
+              <Text style={styles.chartTitle}>{t('comparison.title')}</Text>
+
+              {/* Timeseries chart placeholder */}
+              {showTimeseries && (
+                <View style={styles.timeseriesChart}>
+                  {selectedQuestions.map((q, idx) => (
+                    <View key={q.id} style={styles.timeseriesLegend}>
+                      <View style={[styles.legendDot, { backgroundColor: CHART_COLORS[idx] }]} />
+                      <Text style={styles.legendText}>{q.word}</Text>
+                    </View>
+                  ))}
+                  {/* Chart would be rendered here with react-native-svg or similar */}
+                  <View style={styles.chartPlaceholder}>
+                    <Text style={styles.chartPlaceholderText}>Zeitreihen-Chart</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Results bars */}
+              <View style={styles.resultsSection}>
+                {selectedQuestions.map((q, idx) => {
+                  const canSee = q.total_votes >= threshold;
+                  const yesPct = q.total_votes > 0
+                    ? Math.round((q.yes_count * 100) / q.total_votes)
+                    : 0;
+
+                  return (
+                    <View key={q.id} style={styles.resultRow}>
+                      <View style={[styles.resultDot, { backgroundColor: CHART_COLORS[idx] }]} />
+                      <Text style={styles.resultWord} numberOfLines={1}>{q.word}</Text>
+                      
+                      {canSee ? (
+                        <>
+                          <View style={styles.resultBarContainer}>
+                            <View style={[styles.resultBarYes, { width: `${yesPct}%` }]} />
+                            <View style={[styles.resultBarNo, { width: `${100 - yesPct}%` }]} />
+                          </View>
+                          <Text style={styles.resultPct}>{yesPct}%</Text>
+                          <Text style={styles.resultVotes}>
+                            {q.total_votes.toLocaleString()}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={styles.thresholdGate}>
+                          {t('swipe.threshold_gate', { threshold })}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Footer */}
+              <Text style={styles.chartFooter}>rawlz.app</Text>
+            </View>
+          </ViewShot>
+        )}
+
+        {/* Actions */}
+        {selectedQuestions.length >= 2 && (
+          <View style={styles.comparisonActions}>
+            <TouchableOpacity style={styles.actionButton} onPress={handleShareComparison}>
+              <Text style={styles.actionButtonText}>{t('comparison.share')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonSecondary]}
+              onPress={handleSaveComparison}
+            >
+              <Text style={styles.actionButtonSecondaryText}>{t('comparison.save')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Saved comparisons */}
+        {savedComparisons.length > 0 && (
+          <View style={styles.savedSection}>
+            <Text style={styles.sectionTitle}>{t('comparison.saved_comparisons')}</Text>
+            {savedComparisons.map(comp => (
+              <TouchableOpacity
+                key={comp.id}
+                style={styles.savedItem}
+                onPress={() => loadSavedComparison(comp)}
+              >
+                <Text style={styles.savedItemText}>
+                  {comp.questions.map(q => q.word).join(' vs ')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    );
+  }
+
+  function renderCompassTab() {
+    if (!kompassUnlocked) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.lockedIcon}>🔒</Text>
+          <Text style={styles.lockedTitle}>{t('compass.locked')}</Text>
+          <Text style={styles.lockedSubtitle}>
+            {t('compass.votes_needed', { count: 50 - totalYesNoVotes })}
+          </Text>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${(totalYesNoVotes / 50) * 100}%` }]} />
+          </View>
+          <Text style={styles.progressLabel}>{totalYesNoVotes} / 50</Text>
+        </View>
+      );
+    }
+
+    if (!kompassResult) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>{t('compass.not_enough_calibrated')}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView style={styles.kompassContainer}>
+        <ViewShot
+          ref={kompassRef}
+          options={{ format: 'jpg', quality: 0.9, width: 1080, height: 1080 }}
+          // @ts-ignore
+          collapsable={false}
+        >
+          <View style={styles.kompassCard}>
+            <Text style={styles.kompassTitle}>{t('compass.title')}</Text>
+
+            {/* 2x2 Grid */}
+            <View style={styles.kompassGrid}>
+              {/* Top labels */}
+              <Text style={[styles.kompassLabel, styles.labelTop]}>Liberal</Text>
+              
+              {/* Grid container */}
+              <View style={styles.gridContainer}>
+                {/* Left label */}
+                <Text style={[styles.kompassLabel, styles.labelLeft]}>Sozial</Text>
+                
+                {/* Quadrants */}
+                <View style={styles.quadrants}>
+                  <View style={[styles.quadrant, styles.quadrantTL]}>
+                    <Text style={styles.quadrantLabel}>
+                      {t('compass.quadrant_liberal_social')}
+                    </Text>
+                  </View>
+                  <View style={[styles.quadrant, styles.quadrantTR]}>
+                    <Text style={styles.quadrantLabel}>
+                      {t('compass.quadrant_liberal_market')}
+                    </Text>
+                  </View>
+                  <View style={[styles.quadrant, styles.quadrantBL]}>
+                    <Text style={styles.quadrantLabel}>
+                      {t('compass.quadrant_conservative_social')}
+                    </Text>
+                  </View>
+                  <View style={[styles.quadrant, styles.quadrantBR]}>
+                    <Text style={styles.quadrantLabel}>
+                      {t('compass.quadrant_conservative_market')}
+                    </Text>
+                  </View>
+
+                  {/* User dot */}
+                  <View
+                    style={[
+                      styles.userDot,
+                      {
+                        left: `${((kompassResult.x + 1) / 2) * 100}%`,
+                        top: `${((1 - kompassResult.y) / 2) * 100}%`,
+                      },
+                    ]}
+                  />
+
+                  {/* Crosshairs */}
+                  <View style={styles.crosshairH} />
+                  <View style={styles.crosshairV} />
+                </View>
+
+                {/* Right label */}
+                <Text style={[styles.kompassLabel, styles.labelRight]}>Markt</Text>
+              </View>
+
+              {/* Bottom label */}
+              <Text style={[styles.kompassLabel, styles.labelBottom]}>Konservativ</Text>
+            </View>
+
+            {/* Coordinates */}
+            <Text style={styles.coordinates}>
+              X: {kompassResult.x.toFixed(2)} | Y: {kompassResult.y.toFixed(2)}
+            </Text>
+
+            {/* Footer */}
+            <Text style={styles.kompassFooter}>rawlz.app</Text>
+          </View>
+        </ViewShot>
+
+        {/* Share button */}
+        <TouchableOpacity style={styles.shareButton} onPress={handleShareKompass}>
+          <Text style={styles.shareButtonText}>{t('compass.share')}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.black} />
         </View>
-      ) : activeTab === 'votes' ? (
-        <FlatList
-          data={votes}
-          renderItem={renderVoteItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>{t('history.no_votes')}</Text>
-          }
-        />
-      ) : activeTab === 'search' ? (
-        <>
-          <FlatList
-            data={searchResults}
-            renderItem={renderSearchItem}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContent}
-            ListEmptyComponent={
-              searchQuery.length > 0 ? (
-                <Text style={styles.emptyText}>{t('search.no_results')}</Text>
-              ) : null
-            }
-          />
-          {selectedForComparison.length >= 2 && (
-            <View style={styles.compareBar}>
-              <Text style={styles.compareText}>
-                {t('comparison.selected', { count: selectedForComparison.length })}
-                {selectedForComparison.length >= 5 && ` (${t('comparison.max_reached')})`}
-              </Text>
-              <View style={styles.compareBarButtons}>
-                <TouchableOpacity 
-                  style={styles.clearButton}
-                  onPress={() => setSelectedForComparison([])}
-                >
-                  <Text style={styles.clearButtonText}>{t('comparison.clear')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.compareButton} onPress={startComparison}>
-                  <Text style={styles.compareButtonText}>{t('comparison.compare')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </>
-      ) : activeTab === 'compare' ? (
-        showComparisonView ? (
-          renderComparisonView()
-        ) : (
-          <View style={styles.savedComparisonsContainer}>
-            <Text style={styles.savedTitle}>{t('comparison.saved_comparisons')}</Text>
-            {savedComparisons.length === 0 ? (
-              <Text style={styles.emptyText}>{t('comparison.select_questions')}</Text>
-            ) : (
-              savedComparisons.map(comp => (
-                <TouchableOpacity
-                  key={comp.id}
-                  style={styles.savedItem}
-                  onPress={async () => {
-                    setSelectedForComparison(comp.question_ids);
-                    await startComparison();
-                  }}
-                >
-                  <Text style={styles.savedName}>{comp.name}</Text>
-                  <Text style={styles.savedDate}>{formatTimeAgo(comp.created_at)}</Text>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
-        )
-      ) : activeTab === 'compass' ? (
-        renderCompassView()
-      ) : null}
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {renderTabBar()}
+      
+      {activeTab === 'history' && renderHistoryTab()}
+      {activeTab === 'search' && renderSearchTab()}
+      {activeTab === 'comparison' && renderComparisonTab()}
+      {activeTab === 'compass' && renderCompassTab()}
     </SafeAreaView>
   );
 }
@@ -944,10 +1054,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  tabs: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingTop: 8,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
   },
@@ -961,312 +1074,354 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.black,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray500,
     fontWeight: '500',
   },
   tabTextActive: {
     color: COLORS.black,
-    fontWeight: '600',
-  },
-  searchContainer: {
-    padding: 16,
-  },
-  searchInput: {
-    height: 48,
-    backgroundColor: COLORS.gray100,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: COLORS.black,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    fontWeight: '700',
   },
   listContent: {
     padding: 16,
   },
-  emptyText: {
-    textAlign: 'center',
-    color: COLORS.gray500,
-    marginTop: 48,
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
   },
-  // Vote item styles
-  voteItem: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.gray500,
+    textAlign: 'center',
+  },
+
+  // History tab styles
+  historyItem: {
+    backgroundColor: COLORS.gray100,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
   },
-  voteHeader: {
+  historyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  voteWord: {
+  historyWord: {
     fontSize: 18,
     fontWeight: '700',
     color: COLORS.black,
     flex: 1,
   },
-  voteIcon: {
-    fontSize: 24,
+  voteBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  voteFooter: {
+  voteBadgeYes: {
+    backgroundColor: COLORS.yesLight,
+  },
+  voteBadgeNo: {
+    backgroundColor: COLORS.noLight,
+  },
+  voteBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  changedText: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  resultBar: {
+    height: 8,
+    flexDirection: 'row',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  resultBarYes: {
+    backgroundColor: COLORS.yes,
+    height: '100%',
+  },
+  resultBarNo: {
+    backgroundColor: COLORS.no,
+    height: '100%',
+  },
+  historyFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
   },
-  voteTime: {
-    fontSize: 14,
+  historyMeta: {
+    fontSize: 13,
     color: COLORS.gray500,
   },
-  lockIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  lockedBadge: {
+    backgroundColor: COLORS.noLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
-  lockLocked: {
+  lockedText: {
     fontSize: 12,
     color: COLORS.no,
+    fontWeight: '600',
   },
-  lockUnlocked: {
+  changeButton: {
+    backgroundColor: COLORS.yesLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  changeButtonText: {
     fontSize: 12,
     color: COLORS.yes,
     fontWeight: '600',
   },
-  voteResult: {
-    fontSize: 14,
-    color: COLORS.gray700,
-    marginTop: 8,
+
+  // Search tab styles
+  searchContainer: {
+    flex: 1,
   },
-  historyContainer: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.gray100,
+    margin: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
-  historyEntry: {
-    fontSize: 12,
-    color: COLORS.gray500,
-    marginBottom: 4,
+  searchIcon: {
+    fontSize: 18,
+    marginRight: 8,
   },
-  // Search item styles
+  searchInput: {
+    flex: 1,
+    height: 48,
+    fontSize: 16,
+    color: COLORS.black,
+  },
   searchItem: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.gray100,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  searchItemArchived: {
+    opacity: 0.6,
+  },
+  searchItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  searchItemWord: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  archivedBadge: {
+    backgroundColor: COLORS.gray300,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  archivedText: {
+    fontSize: 11,
+    color: COLORS.gray700,
+  },
+  progressContainer: {
+    marginTop: 12,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: COLORS.gray300,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.gold,
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    marginTop: 4,
+  },
+  searchItemMeta: {
+    fontSize: 13,
+    color: COLORS.gray500,
+    marginTop: 8,
+  },
+  reactivateButton: {
+    marginTop: 12,
+    backgroundColor: COLORS.black,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  reactivateText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Comparison tab styles
+  comparisonContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  sectionHeader: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    marginTop: 4,
+  },
+  clearButton: {
+    marginBottom: 16,
+  },
+  clearButtonText: {
+    fontSize: 14,
+    color: COLORS.no,
+    fontWeight: '600',
+  },
+  questionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 24,
+  },
+  questionChip: {
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    maxWidth: SCREEN_WIDTH / 2 - 24,
+  },
+  questionChipSelected: {
+    backgroundColor: COLORS.black,
+  },
+  questionChipText: {
+    fontSize: 14,
+    color: COLORS.black,
+  },
+  questionChipTextSelected: {
+    color: COLORS.white,
+  },
+  chartContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.gray100,
   },
-  searchItemSelected: {
-    borderColor: COLORS.black,
-    borderWidth: 2,
-  },
-  searchHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  searchWord: {
-    fontSize: 18,
+  chartTitle: {
+    fontSize: 20,
     fontWeight: '700',
     color: COLORS.black,
-    flex: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: COLORS.gray100,
-  },
-  statusActive: {
-    backgroundColor: COLORS.yesLight,
-  },
-  statusPending: {
-    backgroundColor: COLORS.goldLight,
-  },
-  statusText: {
-    fontSize: 12,
-    color: COLORS.gray700,
-    fontWeight: '500',
-  },
-  resultBar: {
-    height: 6,
-    backgroundColor: COLORS.noLight,
-    borderRadius: 3,
-    marginTop: 12,
-    overflow: 'hidden',
-  },
-  resultBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.yes,
-    borderRadius: 3,
-  },
-  archivedRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
-  },
-  archivedLabel: {
-    fontSize: 14,
-    color: COLORS.gray500,
-  },
-  reactivateButton: {
-    fontSize: 14,
-    color: COLORS.deepDive,
-    fontWeight: '600',
-  },
-  // Compare bar
-  compareBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: COLORS.black,
-  },
-  compareText: {
-    color: COLORS.white,
-    fontSize: 14,
-    flex: 1,
-  },
-  compareBarButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  clearButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  clearButtonText: {
-    color: COLORS.gray300,
-    fontSize: 14,
-  },
-  compareButton: {
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  compareButtonText: {
-    color: COLORS.black,
-    fontWeight: '600',
-  },
-  // Comparison view
-  comparisonContainer: {
-    flex: 1,
-  },
-  shareCard: {
-    backgroundColor: COLORS.white,
-    padding: 20,
-    margin: 16,
-    borderRadius: 16,
-  },
-  shareCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
   },
-  shareCardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.gold,
+  timeseriesChart: {
+    marginBottom: 24,
   },
-  shareCardDate: {
-    fontSize: 12,
-    color: COLORS.gray500,
-  },
-  chartContainer: {
-    marginBottom: 20,
-  },
-  chartLine: {
+  timeseriesLegend: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  chartLegendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  chartLegendText: {
-    fontSize: 12,
-    color: COLORS.gray700,
-  },
-  totalsContainer: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
-    paddingTop: 16,
-  },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  totalDot: {
+  legendDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
     marginRight: 8,
   },
-  totalWord: {
+  legendText: {
+    fontSize: 14,
+    color: COLORS.gray700,
+  },
+  chartPlaceholder: {
+    height: 150,
+    backgroundColor: COLORS.gray100,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  chartPlaceholderText: {
+    color: COLORS.gray500,
+  },
+  resultsSection: {
+    marginTop: 16,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  resultDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  resultWord: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.black,
-    width: 100,
+    width: 80,
   },
-  totalBarContainer: {
+  resultBarContainer: {
     flex: 1,
-    height: 8,
+    height: 20,
     flexDirection: 'row',
-    borderRadius: 4,
+    borderRadius: 10,
     overflow: 'hidden',
     marginHorizontal: 8,
   },
-  totalBarYes: {
-    backgroundColor: COLORS.yes,
-    height: '100%',
-  },
-  totalBarNo: {
-    backgroundColor: COLORS.no,
-    height: '100%',
-  },
-  totalText: {
-    fontSize: 11,
-    color: COLORS.gray700,
-    width: 80,
+  resultPct: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.black,
+    width: 40,
     textAlign: 'right',
   },
-  thresholdText: {
-    fontSize: 11,
+  resultVotes: {
+    fontSize: 12,
     color: COLORS.gray500,
-    flex: 1,
-    marginLeft: 8,
+    width: 50,
+    textAlign: 'right',
   },
-  watermark: {
-    textAlign: 'center',
-    fontSize: 10,
+  thresholdGate: {
+    flex: 1,
+    fontSize: 12,
     color: COLORS.gray500,
+    textAlign: 'center',
+  },
+  chartFooter: {
+    textAlign: 'center',
+    color: COLORS.gray300,
+    fontSize: 12,
     marginTop: 16,
   },
   comparisonActions: {
     flexDirection: 'row',
-    padding: 16,
     gap: 12,
+    marginTop: 16,
+    marginBottom: 24,
   },
   actionButton: {
     flex: 1,
@@ -1277,172 +1432,184 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: COLORS.white,
+    fontSize: 16,
     fontWeight: '600',
   },
   actionButtonSecondary: {
     backgroundColor: COLORS.gray100,
   },
-  actionButtonTextSecondary: {
+  actionButtonSecondaryText: {
     color: COLORS.black,
-  },
-  // Saved comparisons
-  savedComparisonsContainer: {
-    padding: 16,
-  },
-  savedTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.black,
-    marginBottom: 16,
+  },
+  savedSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
   },
   savedItem: {
     backgroundColor: COLORS.gray100,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginTop: 12,
   },
-  savedName: {
+  savedItemText: {
     fontSize: 14,
-    fontWeight: '600',
     color: COLORS.black,
   },
-  savedDate: {
-    fontSize: 12,
-    color: COLORS.gray500,
-    marginTop: 4,
-  },
-  // Compass styles
-  compassLocked: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  compassLockedIcon: {
+
+  // Compass tab styles
+  lockedIcon: {
     fontSize: 48,
     marginBottom: 16,
   },
-  compassLockedText: {
-    fontSize: 16,
-    color: COLORS.gray500,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  compassProgress: {
-    fontSize: 14,
-    color: COLORS.gray700,
+  lockedTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.black,
     marginBottom: 8,
   },
-  progressBar: {
-    width: 200,
-    height: 8,
-    backgroundColor: COLORS.gray100,
-    borderRadius: 4,
-    overflow: 'hidden',
+  lockedSubtitle: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    marginBottom: 24,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.black,
+  progressLabel: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    marginTop: 8,
   },
-  compassContainer: {
+  kompassContainer: {
     flex: 1,
     padding: 16,
   },
-  compassCard: {
+  kompassCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: 24,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
     alignItems: 'center',
   },
-  compassTitle: {
-    fontSize: 20,
+  kompassTitle: {
+    fontSize: 24,
     fontWeight: '700',
     color: COLORS.black,
     marginBottom: 24,
   },
-  compassGrid: {
-    backgroundColor: COLORS.gray100,
+  kompassGrid: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quadrants: {
+    width: 240,
+    height: 240,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     position: 'relative',
   },
+  quadrant: {
+    width: 120,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  quadrantTL: {
+    backgroundColor: '#E8F5E9',
+  },
+  quadrantTR: {
+    backgroundColor: '#E3F2FD',
+  },
+  quadrantBL: {
+    backgroundColor: '#FFF3E0',
+  },
+  quadrantBR: {
+    backgroundColor: '#FCE4EC',
+  },
   quadrantLabel: {
-    position: 'absolute',
     fontSize: 10,
     color: COLORS.gray500,
     textAlign: 'center',
   },
-  quadrantTopLeft: {
-    top: 8,
-    left: 8,
-    width: '45%',
-  },
-  quadrantTopRight: {
-    top: 8,
-    right: 8,
-    width: '45%',
-    textAlign: 'right',
-  },
-  quadrantBottomLeft: {
-    bottom: 8,
-    left: 8,
-    width: '45%',
-  },
-  quadrantBottomRight: {
-    bottom: 8,
-    right: 8,
-    width: '45%',
-    textAlign: 'right',
-  },
-  axisHorizontal: {
+  userDot: {
     position: 'absolute',
-    top: '50%',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: COLORS.gray300,
-  },
-  axisVertical: {
-    position: 'absolute',
-    left: '50%',
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: COLORS.gray300,
-  },
-  compassDot: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: COLORS.gold,
     borderWidth: 3,
     borderColor: COLORS.white,
+    marginLeft: -10,
+    marginTop: -10,
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
   },
-  compassQuadrant: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.black,
-    marginTop: 24,
+  crosshairH: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '50%',
+    height: 1,
+    backgroundColor: COLORS.gray300,
   },
-  compassWatermark: {
+  crosshairV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1,
+    backgroundColor: COLORS.gray300,
+  },
+  kompassLabel: {
     fontSize: 12,
     color: COLORS.gray500,
+    fontWeight: '600',
+  },
+  labelTop: {
+    marginBottom: 8,
+  },
+  labelBottom: {
+    marginTop: 8,
+  },
+  labelLeft: {
+    marginRight: 8,
+    transform: [{ rotate: '-90deg' }],
+  },
+  labelRight: {
+    marginLeft: 8,
+    transform: [{ rotate: '90deg' }],
+  },
+  coordinates: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    marginTop: 24,
+  },
+  kompassFooter: {
+    fontSize: 12,
+    color: COLORS.gray300,
     marginTop: 16,
   },
-  shareCompassButton: {
+  shareButton: {
     backgroundColor: COLORS.black,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 24,
   },
-  shareCompassButtonText: {
+  shareButtonText: {
     color: COLORS.white,
+    fontSize: 18,
     fontWeight: '600',
-    fontSize: 16,
   },
 });

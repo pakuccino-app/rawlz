@@ -461,17 +461,60 @@ export default function SwipeScreen() {
   async function loadAIContent() {
     if (!currentQuestion) return;
 
-    if (currentQuestion.ai_context_cache) {
+    // Check if cached data exists and is valid
+    if (currentQuestion.ai_context_cache?.sentence) {
       setAIContent(currentQuestion.ai_context_cache);
       return;
     }
 
-    // TODO: Call AI endpoint for fresh content
+    // Show loading state
     setAIContent({
-      title: currentQuestion.word,
-      sentence: 'AI-generierte Fakten werden geladen...',
-      bullets: ['Lade...'],
+      sentence: t('ai.loading'),
+      bullets: [],
+      isLoading: true,
     });
+
+    try {
+      const session = await getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/generate-ai-facts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ questionId: currentQuestion.id }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success && result.facts) {
+        setAIContent(result.facts);
+        // Update local question cache
+        setQuestions(prev => prev.map(q => 
+          q.id === currentQuestion.id 
+            ? { ...q, ai_context_cache: result.facts }
+            : q
+        ));
+      } else {
+        setAIContent({
+          sentence: t('ai.error'),
+          bullets: [],
+          isLoading: false,
+        });
+      }
+    } catch (error) {
+      console.error('AI content error:', error);
+      setAIContent({
+        sentence: t('ai.error'),
+        bullets: [],
+        isLoading: false,
+      });
+    }
   }
 
   // Card animated style

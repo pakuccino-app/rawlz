@@ -6,151 +6,150 @@ Build a production-ready full-stack mobile and web application called "RAWLZ" (T
 ### Tech Stack
 - **Mobile App**: React Native + Expo
 - **Backend**: Supabase (PostgreSQL + Auth + Edge Functions)
-- **Web Admin/B2B**: React + TypeScript (Phase 3+)
+- **Web Admin/B2B**: React + TypeScript
 
 ## Development Phases
 
 ### Phase 1 - COMPLETED ✅
 Core database, Edge Functions, mobile auth, and swipe screen.
 
-**Completed:**
-- Supabase schema (`001_initial_schema.sql`)
-- CRON jobs (`002_cron_jobs.sql`)
-- Edge Functions: admin-login, admin-logout, admin-auth-check, admin-totp-setup, admin-totp-verify, admin-manage-user, change-vote, tag-question, activate-question-notify
-- Mobile: Expo initialization, i18n, haptics, auth flows
-- Swipe screen UI with gesture handling
+### Phase 2 - COMPLETED ✅
+Search, History, Suggestion, Settings screens, Daily Pulse, Wirksamkeit, Abuse Reporting, Share Cards, AI Facts Overlay (GPT-4o-mini).
 
-### Phase 2 - IN PROGRESS 🔄
-Search, History, Suggestion, and Settings screens.
+### Phase 3 - COMPLETED ✅ (December 2025)
+Full Membership System
 
-**Completed (December 2025):**
-- **Edge Functions:**
-  - `submit-question` (EF-03): Question submission with threshold calculation
-  - `report-abuse` (EF-04): Abuse reporting with rate limiting
-  - `get-wirksamkeit` (EF-05): User effectiveness data
-  - `mark-wirksamkeit-shown` (EF-06): Mark Wirksamkeit overlay as shown
-  - `get-daily-pulse` (EF-07): Daily Pulse question retrieval
+**Edge Functions Created:**
+- `revenuecat-webhook` - RevenueCat webhooks for Supporter purchases/refunds
+- `user-totp-setup` - Expert 2FA (generate/confirm/verify with TOTP)
+- `create-lobby-checkout` - Stripe Checkout for commercial Lobby (€2,400/year)
+- `stripe-webhook` - All 7 Stripe events + subsidized handling
+- `create-billing-portal` - Stripe Billing Portal for Lobby accounts
+- `activate-subsidized-lobby` - Admin: €0 activation for subsidized accounts
+- `create-subsidized-checkout` - Admin: custom amount one-time payment
+- `register-lobby` - Lobby registration (commercial + subsidized)
 
-- **Offline Queue** (`lib/offlineQueue.ts`):
-  - Full offline vote queuing with conflict resolution
-  - Question prefetching and caching
-  - Network listener for auto-sync
-  - Abuse report queuing
-  - Optimistic UI updates
+**Mobile UI:**
+- `lib/revenuecat.ts` - RevenueCat integration with German error messages
+- `app/membership.tsx` - Full membership screen (BASIS/SUPPORTER/EXPERTE/LOBBY)
+- `app/2fa-setup.tsx` - Expert 2FA setup with QR code (react-native-qrcode-svg)
+- `app/profile.tsx` - 3-tier optional profile with Trust bonus preview
 
-- **Share Cards:**
-  - `MoodCard`: User's voting mood overview (1080x1080px)
-  - `MyVoteCard`: Single vote result sharing
-  - `ChartCard`: Comparison chart sharing
+**Web Lobby (lobby.rawlz.app):**
+- `web-lobby/src/pages/register.tsx` - PATH A (Commercial) + PATH B (Subsidized)
+- `web-lobby/src/pages/success.tsx` - Checkout success page
+- `web-lobby/src/App.tsx` - Router setup
 
-- **Components:**
-  - `WirksamkeitOverlay`: Effectiveness overlay (after 100 votes)
-  - `AbuseReportSheet`: Abuse reporting bottom sheet
-  - `DailyPulseCard`: Special card for daily pulse questions
+**Features:**
+1. **SUPPORTER (€1 via RevenueCat)**
+   - Non-consumable purchase 'rawlz_supporter_onetime'
+   - Trust +10 bonus (idempotent)
+   - Pending questions threshold reduced to 30
+   - Supporter badge
+   - German error messages for all RevenueCat error codes
 
-- **Swipe Screen** (updated `index.tsx`):
-  - Daily Pulse card integration
-  - Wirksamkeit overlay trigger
-  - Abuse reporting UI
-  - Offline mode with banner
-  - Network state listener
+2. **EXPERTE**
+   - Trust Score progress bar (0-100)
+   - Vouch UI (max 5 active vouches)
+   - 2FA Setup with QR Code + manual code fallback
+   - 2FA verification required at login
 
-- **Translations** (de.json, en.json):
-  - All new strings for Phase 2 features
-  - Abuse, share, wirksamkeit sections
+3. **LOBBY Commercial (€2,400/year)**
+   - Stripe Checkout integration
+   - Immediate access after payment (INV-26)
+   - Billing Portal for subscription management
+   - Status banner (active/past_due/cancelled)
 
-**In Progress:**
-- Search & History Dashboard (4 tabs with comparison mode)
-- Suggest screen with autocomplete
-- Settings with notification list
+4. **LOBBY Subsidized (Förderantrag)**
+   - Eligibility: NGOs, foundations, education, government, journalism
+   - Required fields: org_type, trade_register_no, subsidy_reason
+   - NO immediate access (INV-28)
+   - Admin approval via moderation_queue
+   - €0 or custom amount activation
 
-### Phase 3+ - FUTURE
+5. **Optional User Profile (3 Tiers)**
+   - Tier 1 (all): age_group, geo_city_size, geo_type → +1 Trust each
+   - Tier 2 (all): gender, education, political_lean, political_interest → +2 Trust each
+   - Tier 3 (all): employment, income, voting, org_membership → +3 Trust each
+   - Supporter+: media, smartphone, AI tools, housing, household, children
+   - Expert+: expert_field, expert_role, academic_degree
+   - Lobby+: org_type, org_sector, org_size, org_geo_focus, org_use_case
+   - Skip buttons + Trust bonus preview on each field
+
+### Phase 4+ - UPCOMING
 - Web Admin Panel (`admin.rawlz.app`)
-- B2B Web Dashboard (`lobby.rawlz.app`)
-- Stripe checkout Edge Functions
+- B2B Web Dashboard full implementation
 - PDF Report Generation
+- API access for Lobby accounts
 
 ## Architecture
 
 ```
 /app/
-├── mobile/                  # React Native Expo App
-│   ├── app/                 # expo-router file-based navigation
-│   │   ├── (tabs)/          # Main bottom tabs
-│   │   │   ├── _layout.tsx  # Tab navigation config
-│   │   │   ├── index.tsx    # Swipe screen
-│   │   │   ├── search.tsx   # Search & History
-│   │   │   └── settings.tsx # Settings
-│   │   ├── auth/            # Auth screens
-│   │   └── suggest.tsx      # Question suggestion
-│   ├── components/          # Reusable components
-│   │   ├── ShareCards/      # Share card components
+├── mobile/                    # React Native Expo App
+│   ├── app/                   # expo-router
+│   │   ├── (tabs)/            # Bottom tabs (index, search, settings)
+│   │   ├── auth/              # Login screens
+│   │   ├── membership.tsx     # Membership management
+│   │   ├── 2fa-setup.tsx      # Expert 2FA setup
+│   │   ├── profile.tsx        # Optional user profile
+│   │   └── suggest.tsx        # Question suggestion
+│   ├── components/            # Reusable components
+│   │   ├── ShareCards/        # Share card components
 │   │   ├── WirksamkeitOverlay.tsx
 │   │   ├── AbuseReportSheet.tsx
 │   │   └── DailyPulseCard.tsx
-│   ├── lib/                 # Core logic
-│   │   ├── supabase.ts      # Supabase client
-│   │   ├── offlineQueue.ts  # Offline sync
-│   │   ├── constants.ts     # Design system
-│   │   ├── i18n.ts          # Internationalization
-│   │   ├── haptics.ts       # Haptic feedback
-│   │   ├── sounds.ts        # Sound effects
-│   │   ├── kompass.ts       # Compass calculation
-│   │   ├── auth.ts          # Auth utilities
-│   │   └── hashing.ts       # Hash utilities
-│   ├── locales/             # Translations
-│   │   ├── de.json          # German
-│   │   └── en.json          # English
-│   └── package.json
-├── supabase/                # Backend
-│   ├── functions/           # Deno Edge Functions
-│   │   ├── activate-question-notify/
-│   │   ├── submit-question/
-│   │   ├── report-abuse/
-│   │   ├── get-wirksamkeit/
-│   │   ├── mark-wirksamkeit-shown/
-│   │   ├── get-daily-pulse/
-│   │   ├── admin-*/
-│   │   ├── change-vote/
-│   │   └── tag-question/
-│   └── migrations/          # PostgreSQL
-│       ├── 001_initial_schema.sql
-│       └── 002_cron_jobs.sql
-└── backend/ & frontend/     # LEGACY (Do not use)
+│   └── lib/                   # Core logic
+│       ├── revenuecat.ts      # RevenueCat integration
+│       ├── supabase.ts        # Supabase client
+│       ├── offlineQueue.ts    # Offline sync
+│       └── ...
+├── web-lobby/                 # Lobby Web Portal (React + TS)
+│   └── src/
+│       ├── pages/
+│       │   ├── register.tsx   # Commercial + Subsidized registration
+│       │   └── success.tsx    # Checkout success
+│       └── App.tsx
+├── supabase/                  # Backend
+│   ├── functions/             # 24 Edge Functions
+│   └── migrations/            # PostgreSQL schema
+└── backend/ & frontend/       # LEGACY (Do not use)
 ```
 
-## Key Database Tables
-- `users`: User accounts with membership, trust score, geo preferences
-- `questions`: Questions with vote counts, status, AI tags
-- `votes`: User votes with conflict resolution
-- `question_notification_requests`: Activation notifications
-- `vote_timeseries`: Time-based vote data
-- `question_comparisons`: Saved comparisons
-- `abuse_reports`: Abuse reports with auto-moderation triggers
-
-## Design System
-- **Colors**: White base, black text, green (yes), red (no), gold (premium)
-- **Typography**: Bold, high-contrast, scalable font sizes
-- **Haptics**: Distinct patterns for yes/no/archive/deep-dive
-- **Animations**: Spring-based swipe, flash feedback
+## Edge Functions Summary (24 total)
+1. `activate-question-notify` - Notify users when question activates
+2. `admin-auth-check` - Admin session validation
+3. `admin-login` - Admin login
+4. `admin-logout` - Admin logout
+5. `admin-manage-user` - Admin user management
+6. `admin-totp-setup` - Admin 2FA setup
+7. `admin-totp-verify` - Admin 2FA verification
+8. `change-vote` - Change user vote (with lock period)
+9. `create-billing-portal` - Stripe Billing Portal
+10. `create-lobby-checkout` - Stripe Checkout for commercial
+11. `create-subsidized-checkout` - Custom amount checkout for subsidized
+12. `generate-ai-facts` - GPT-4o-mini AI facts generation
+13. `get-daily-pulse` - Get today's daily pulse question
+14. `get-wirksamkeit` - Get user effectiveness data
+15. `mark-wirksamkeit-shown` - Mark effectiveness overlay as shown
+16. `register-lobby` - Lobby account registration
+17. `report-abuse` - Report abuse on questions
+18. `revenuecat-webhook` - RevenueCat purchase webhooks
+19. `stripe-webhook` - Stripe subscription webhooks
+20. `submit-question` - Submit new question
+21. `tag-question` - Tag question with AI tags
+22. `user-totp-setup` - Expert 2FA setup
+23. `activate-subsidized-lobby` - Admin activate subsidized account
+24. `activate-question-notify` - Question activation notifications
 
 ## 3rd Party Integrations
-- Supabase (PostgreSQL, Auth, Edge Functions) - Placeholder keys
-- Stripe (Payments) - Placeholder keys
+- Supabase (DB/Auth/Edge Functions) - Placeholder keys
 - RevenueCat (In-App Purchases) - Placeholder keys
-- OpenAI GPT-4o-mini (AI Fact overlays) - Emergent LLM Key
+- Stripe (Payments) - Placeholder keys
+- OpenAI GPT-4o-mini (AI Facts) - Emergent LLM Key
 
-## Next Action Items
-1. Complete Search screen with all 4 tabs and comparison mode
-2. Finalize Suggest screen autocomplete
-3. Test offline queue sync
-4. Implement AI Fact overlay with GPT-4o-mini
-
-## Known Constraints
-- INV-01: Word format `#[a-zA-Z0-9äöüÄÖÜß]{1,27}`
-- INV-03: Result thresholds by membership
-- INV-09: `detectSessionInUrl: false` for React Native
-- INV-14: Daily Pulse must be first card
-- INV-15: Vote lock 3 minutes
-- INV-17: Full offline support
-- INV-19: One-time notification cleanup
+## Next Steps (Phase 4)
+1. Build Admin Panel (`admin.rawlz.app`)
+2. Complete Lobby Dashboard with analytics
+3. Implement PDF Report Generation
+4. Add API access for Lobby accounts
