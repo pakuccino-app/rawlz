@@ -474,6 +474,45 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // ==================== PUSH NOTIFICATIONS ====================
+      case 'send_push': {
+        const { title, body: pushBody, targetGroup, data: pushData } = body.payload;
+
+        const pushResult = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-push-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({ title, body: pushBody, targetGroup, data: pushData }),
+        });
+
+        const pushJson = await pushResult.json();
+        if (!pushResult.ok) throw new Error(pushJson.error ?? 'Push fehlgeschlagen');
+        return new Response(JSON.stringify(pushJson), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // ==================== AUDIT LOG ====================
+      case 'get_audit_log': {
+        const { action: filterAction, limit: logLimit = 50 } = body.payload || {};
+
+        let query = supabase
+          .from('admin_audit_log')
+          .select('id, action, entity_type, entity_id, details, created_at')
+          .order('created_at', { ascending: false })
+          .limit(logLimit);
+
+        if (filterAction) query = query.eq('action', filterAction);
+
+        const { data: logs, error: logErr } = await query;
+        if (logErr) throw logErr;
+        return new Response(JSON.stringify({ logs }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       default:
         return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400 });
     }

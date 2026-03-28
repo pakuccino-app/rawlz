@@ -36,21 +36,28 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Verify admin
+  // Auth: accept service role (for CRON/internal) or admin session token
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
   const token = authHeader.replace('Bearer ', '');
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('id, role')
-    .eq('session_token', token)
-    .single();
 
-  if (!admin) {
-    return new Response(JSON.stringify({ error: 'Invalid admin session' }), { status: 401 });
+  // Allow service role key for internal/CRON calls
+  const isServiceRole = token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!isServiceRole) {
+    // Verify admin session token
+    const { data: admin } = await supabase
+      .from('admin_users')
+      .select('id, role')
+      .eq('session_token', token)
+      .single();
+
+    if (!admin) {
+      return new Response(JSON.stringify({ error: 'Invalid admin session' }), { status: 401 });
+    }
   }
 
   const body: PushRequest = await req.json();
