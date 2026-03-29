@@ -1,9 +1,10 @@
 // web-admin/src/lib/api.ts
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-// Basis-Header für alle Supabase Edge Function Aufrufe
+// Relative URL – Vercel proxied /functions/v1/* → Supabase (kein externer Domain-Call im Browser)
+const FN_BASE = '/functions/v1';
+
 function baseHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return {
     'Content-Type': 'application/json',
@@ -47,7 +48,7 @@ export async function adminLogin(email: string, password: string): Promise<{
   role?: string;
   error?: string;
 }> {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-login`, {
+  const response = await fetch(`${FN_BASE}/admin-login`, {
     method: 'POST',
     headers: baseHeaders(),
     body: JSON.stringify({ email, password }),
@@ -62,7 +63,7 @@ export async function adminTotpVerify(tempToken: string, totpCode: string): Prom
   displayName?: string;
   error?: string;
 }> {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-totp-verify`, {
+  const response = await fetch(`${FN_BASE}/admin-totp-verify`, {
     method: 'POST',
     headers: baseHeaders({ 'Authorization': `Bearer ${tempToken}` }),
     body: JSON.stringify({ totpCode }),
@@ -80,7 +81,7 @@ export async function adminTotpSetup(tempToken: string): Promise<{
   manualCode?: string;
   error?: string;
 }> {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-totp-setup`, {
+  const response = await fetch(`${FN_BASE}/admin-totp-setup`, {
     method: 'POST',
     headers: baseHeaders({ 'Authorization': `Bearer ${tempToken}` }),
     body: JSON.stringify({}),
@@ -92,7 +93,7 @@ export async function adminApi(action: string, payload?: any): Promise<any> {
   const token = getSessionToken();
   if (!token) throw new Error('Nicht angemeldet');
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
+  const response = await fetch(`${FN_BASE}/admin-api`, {
     method: 'POST',
     headers: baseHeaders({ 'Authorization': `Bearer ${token}` }),
     body: JSON.stringify({ action, payload }),
@@ -113,7 +114,7 @@ export async function adminApi(action: string, payload?: any): Promise<any> {
 export async function adminLogout(): Promise<void> {
   const token = getSessionToken();
   if (token) {
-    await fetch(`${SUPABASE_URL}/functions/v1/admin-logout`, {
+    await fetch(`${FN_BASE}/admin-logout`, {
       method: 'POST',
       headers: baseHeaders({ 'Authorization': `Bearer ${token}` }),
     }).catch(() => null);
