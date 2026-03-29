@@ -1,6 +1,7 @@
 // EF-10: /functions/v1/admin-totp-verify
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { authenticator } from 'https://esm.sh/otplib@12';
+import otplib from 'https://esm.sh/otplib@12.0.1?bundle-deps';
+const { authenticator } = otplib;
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
