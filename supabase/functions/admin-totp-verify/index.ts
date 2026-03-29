@@ -153,9 +153,11 @@ Deno.serve(async (req: Request) => {
     details: { ip: sess.ip_address, role: admin.role },
   });
 
+  // FIX 5: sessionToken zurückgeben (Frontend braucht es für navigate('/dashboard'))
   return new Response(
     JSON.stringify({
       success: true,
+      sessionToken: token,
       role: admin.role,
       displayName: admin.display_name,
     }),

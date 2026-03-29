@@ -66,7 +66,8 @@ export default function LoginPage() {
         return;
       }
 
-      if (result.sessionToken) {
+      // FIX 5: sessionToken kommt jetzt aus adminTotpVerify zurück
+      if (result.success || result.sessionToken) {
         navigate('/dashboard');
       }
     } catch (err: any) {

@@ -1,5 +1,4 @@
-// web-admin/src/lib/api.ts
-// Admin API client
+// web-admin/src/lib/api.ts  (FIX: ipAddress entfernt, TOTP-Header, sessionToken nach Verify)
 
 const API_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -29,11 +28,13 @@ export function getSessionToken(): string | null {
   return sessionToken;
 }
 
+// FIX 2: kein ipAddress mehr im Body (Edge Function liest IP aus Request-Headern)
 export async function adminLogin(email: string, password: string): Promise<{
-  success: boolean;
+  tempToken?: string;
   needsTotp?: boolean;
   needsTotpSetup?: boolean;
-  tempToken?: string;
+  displayName?: string;
+  role?: string;
   error?: string;
 }> {
   const response = await fetch(`${API_URL}/functions/v1/admin-login`, {
@@ -41,49 +42,56 @@ export async function adminLogin(email: string, password: string): Promise<{
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-
   return response.json();
 }
 
+// FIX 4: Authorization-Header senden (nicht Body) – so erwartet es admin-totp-verify
 export async function adminTotpVerify(tempToken: string, totpCode: string): Promise<{
-  success: boolean;
   sessionToken?: string;
-  admin?: AdminUser;
+  success?: boolean;
+  role?: string;
+  displayName?: string;
   error?: string;
 }> {
   const response = await fetch(`${API_URL}/functions/v1/admin-totp-verify`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tempToken, totpCode }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${tempToken}`,
+    },
+    body: JSON.stringify({ totpCode }),
   });
 
   const result = await response.json();
+
+  // FIX 5: sessionToken setzen → Dashboard-Navigation funktioniert
   if (result.sessionToken) {
     setSessionToken(result.sessionToken);
   }
+
   return result;
 }
 
+// FIX 4: Authorization-Header senden für admin-totp-setup
 export async function adminTotpSetup(tempToken: string): Promise<{
-  success: boolean;
   otpauthUri?: string;
   manualCode?: string;
   error?: string;
 }> {
   const response = await fetch(`${API_URL}/functions/v1/admin-totp-setup`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tempToken }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${tempToken}`,
+    },
+    body: JSON.stringify({}),
   });
-
   return response.json();
 }
 
 export async function adminApi(action: string, payload?: any): Promise<any> {
   const token = getSessionToken();
-  if (!token) {
-    throw new Error('Not authenticated');
-  }
+  if (!token) throw new Error('Nicht angemeldet');
 
   const response = await fetch(`${API_URL}/functions/v1/admin-api`, {
     method: 'POST',
@@ -95,16 +103,14 @@ export async function adminApi(action: string, payload?: any): Promise<any> {
   });
 
   const result = await response.json();
-  
+
   if (response.status === 401) {
     setSessionToken(null);
     window.location.href = '/login';
-    throw new Error('Session expired');
+    throw new Error('Session abgelaufen');
   }
 
-  if (result.error) {
-    throw new Error(result.error);
-  }
+  if (result.error) throw new Error(result.error);
 
   return result;
 }
@@ -118,7 +124,7 @@ export async function adminLogout(): Promise<void> {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-    });
+    }).catch(() => null);
   }
   setSessionToken(null);
 }

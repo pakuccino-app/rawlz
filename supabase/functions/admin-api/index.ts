@@ -15,46 +15,69 @@ interface AdminRequest {
   payload?: any;
 }
 
-// Verify admin session and IP
+// Verify admin session and IP  – FIX 6: admin_sessions statt admin_users
 async function verifyAdmin(token: string, clientIp: string): Promise<{ admin: any; error?: string }> {
-  const { data: admin, error } = await supabase
-    .from('admin_users')
-    .select('*')
+  // Session in admin_sessions suchen (mit totp_verified = true)
+  const { data: sess, error: sessErr } = await supabase
+    .from('admin_sessions')
+    .select('admin_id, expires_at, ip_address, totp_verified')
     .eq('session_token', token)
     .single();
 
-  if (error || !admin) {
-    return { admin: null, error: 'Invalid session' };
+  if (sessErr || !sess) {
+    return { admin: null, error: 'Ungültige Session' };
   }
 
-  // Check session expiry
-  const sessionAge = Date.now() - new Date(admin.session_created_at).getTime();
-  if (sessionAge > SESSION_DURATION_MS) {
-    return { admin: null, error: 'Session expired' };
+  if (new Date(sess.expires_at) < new Date()) {
+    return { admin: null, error: 'Session abgelaufen' };
   }
 
-  // Check inactivity
-  const lastActivity = Date.now() - new Date(admin.last_activity_at).getTime();
-  if (lastActivity > INACTIVITY_TIMEOUT_MS) {
-    return { admin: null, error: 'Session timeout due to inactivity' };
+  if (!sess.totp_verified) {
+    return { admin: null, error: '2FA nicht abgeschlossen' };
   }
 
-  // Check IP
-  const { data: ipCheck } = await supabase
-    .from('admin_ip_whitelist')
-    .select('ip')
-    .eq('ip', clientIp)
-    .maybeSingle();
-
-  if (!ipCheck) {
-    return { admin: null, error: 'IP not whitelisted' };
-  }
-
-  // Update last activity
-  await supabase
+  // Admin-User laden
+  const { data: admin, error: adminErr } = await supabase
     .from('admin_users')
-    .update({ last_activity_at: new Date().toISOString() })
-    .eq('id', admin.id);
+    .select('*')
+    .eq('id', sess.admin_id)
+    .single();
+
+  if (adminErr || !admin || !admin.is_active) {
+    return { admin: null, error: 'Admin nicht gefunden oder inaktiv' };
+  }
+
+  // Inaktivitäts-Timeout (2h)
+  const inactivity = sess.last_used_at
+    ? Date.now() - new Date(sess.last_used_at).getTime()
+    : 0;
+  if (inactivity > INACTIVITY_TIMEOUT_MS) {
+    return { admin: null, error: 'Session-Timeout (Inaktivität)' };
+  }
+
+  // IP-Whitelist prüfen (nur wenn Einträge vorhanden)
+  const { data: ipEntries } = await supabase
+    .from('admin_ip_whitelist')
+    .select('id')
+    .limit(1);
+
+  if (ipEntries && ipEntries.length > 0) {
+    const { data: ipCheck } = await supabase
+      .from('admin_ip_whitelist')
+      .select('ip')
+      .eq('ip', clientIp)
+      .maybeSingle();
+
+    if (!ipCheck) {
+      return { admin: null, error: 'IP nicht autorisiert' };
+    }
+  }
+
+  // last_used_at aktualisieren
+  await supabase
+    .from('admin_sessions')
+    .update({ last_used_at: new Date().toISOString() })
+    .eq('session_token', token);
 
   return { admin };
 }

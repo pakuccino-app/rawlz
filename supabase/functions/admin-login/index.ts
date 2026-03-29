@@ -1,4 +1,4 @@
-// EF-08: /functions/v1/admin-login
+// EF-08: /functions/v1/admin-login  (FIX: IP aus Header, korrekte Response-Felder)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const supabase = createClient(
@@ -6,127 +6,116 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 );
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS },
+  });
+}
+
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    });
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+
+  // FIX 2: IP aus Request-Headern lesen (nicht aus Body)
+  const clientIp =
+    req.headers.get('X-Real-IP') ??
+    req.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ??
+    '0.0.0.0';
+
+  const { email, password } = await req.json();
+
+  if (!email || !password) {
+    return json({ error: 'email und password erforderlich' }, 400);
   }
 
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
-  }
-
-  const { email, password, ipAddress } = await req.json();
-  
-  if (!email || !password || !ipAddress) {
-    return new Response(
-      JSON.stringify({ error: 'email, password, ipAddress required' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } }
-    );
-  }
-
-  // Check IP whitelist
-  const { data: ipEntry } = await supabase
+  // IP Whitelist prüfen (nur wenn Einträge vorhanden – optional für Entwicklung)
+  const { data: ipEntries } = await supabase
     .from('admin_ip_whitelist')
     .select('id')
-    .eq('ip_address', ipAddress)
-    .single();
+    .limit(1);
 
-  if (!ipEntry) {
-    await supabase.from('admin_audit_log').insert({
-      admin_id: 'unknown',
-      action: 'login_ip_rejected',
-      details: { email, ip: ipAddress },
-    });
-    return new Response(
-      JSON.stringify({ error: 'IP not authorized' }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } }
-    );
+  if (ipEntries && ipEntries.length > 0) {
+    const { data: ipEntry } = await supabase
+      .from('admin_ip_whitelist')
+      .select('id')
+      .eq('ip_address', clientIp)
+      .single();
+
+    if (!ipEntry) {
+      await supabase.from('admin_audit_log').insert({
+        action: 'login_ip_rejected',
+        details: { email, ip: clientIp },
+      });
+      return json({ error: 'IP nicht autorisiert' }, 403);
+    }
   }
 
-  // Get admin user
+  // Admin-User laden
   const { data: admin } = await supabase
     .from('admin_users')
-    .select('id,role,is_active,totp_enabled,failed_attempts,locked_until,display_name')
+    .select('id, role, is_active, totp_enabled, failed_attempts, locked_until, display_name')
     .eq('email', email)
     .single();
 
   if (!admin || !admin.is_active) {
-    return new Response(
-      JSON.stringify({ error: 'Not authorized' }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } }
-    );
+    return json({ error: 'Keine Berechtigung' }, 403);
   }
 
-  // Check if account is locked
+  // Account gesperrt?
   if (admin.locked_until && new Date(admin.locked_until) > new Date()) {
-    const remaining = Math.ceil(
-      (new Date(admin.locked_until).getTime() - Date.now()) / 1000
-    );
-    return new Response(
-      JSON.stringify({ error: 'Account locked', lockedForSeconds: remaining }),
-      { status: 429, headers: { 'Content-Type': 'application/json' } }
-    );
+    const remaining = Math.ceil((new Date(admin.locked_until).getTime() - Date.now()) / 1000);
+    return json({ error: 'Konto gesperrt', lockedForSeconds: remaining }, 429);
   }
 
-  // Verify password with Supabase Auth
+  // Passwort via Supabase Auth verifizieren
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
   if (authError || !authData.user) {
-    const newAttempts = admin.failed_attempts + 1;
+    const newAttempts = (admin.failed_attempts ?? 0) + 1;
     const update: any = { failed_attempts: newAttempts };
-    
     if (newAttempts >= 5) {
       update.locked_until = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     }
-    
     await supabase.from('admin_users').update(update).eq('id', admin.id);
-    
-    return new Response(
-      JSON.stringify({
-        error: 'Invalid credentials',
-        attemptsRemaining: Math.max(0, 5 - newAttempts),
-      }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
-    );
+    return json({
+      error: 'Ungültige Anmeldedaten',
+      attemptsRemaining: Math.max(0, 5 - newAttempts),
+    }, 401);
   }
 
-  // Generate session token
-  const token = crypto.randomUUID().replace(/-/g, '') + 
-                crypto.randomUUID().replace(/-/g, '');
+  // Session-Token generieren und in admin_sessions speichern
+  const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
-  // Create admin session
   await supabase.from('admin_sessions').insert({
     admin_id: admin.id,
     session_token: token,
-    ip_address: ipAddress,
+    ip_address: clientIp,
     totp_verified: false,
     expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
   });
 
-  // Log successful password verification
   await supabase.from('admin_audit_log').insert({
     admin_id: admin.id,
     action: 'login_password_ok',
-    details: { ip: ipAddress },
+    details: { ip: clientIp },
   });
 
-  return new Response(
-    JSON.stringify({
-      sessionToken: token,
-      requiresTotpSetup: !admin.totp_enabled,
-      displayName: admin.display_name,
-      role: admin.role,
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } }
-  );
+  // FIX 3: Korrekte Response-Felder (passend zum Frontend)
+  return json({
+    tempToken: token,
+    needsTotp: admin.totp_enabled === true,
+    needsTotpSetup: admin.totp_enabled !== true,
+    displayName: admin.display_name ?? email,
+    role: admin.role,
+  });
 });
