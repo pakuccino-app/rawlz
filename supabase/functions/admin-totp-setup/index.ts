@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
   const token = req.headers.get('Authorization')?.replace('Bearer ', '');
   
   if (!token) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response(JSON.stringify({"error":"Nicht autorisiert"}),{status:401,headers:{"Content-Type":"application/json"}});
   }
 
   // Verify session
@@ -57,7 +57,7 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (!sess || new Date(sess.expires_at) < new Date()) {
-    return new Response('Session expired', { status: 401 });
+    return new Response(JSON.stringify({"error":"Session abgelaufen"}),{status:401,headers:{"Content-Type":"application/json"}});
   }
 
   // Get admin user

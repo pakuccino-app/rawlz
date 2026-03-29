@@ -74,8 +74,15 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Konto gesperrt', lockedForSeconds: remaining }, 429);
   }
 
-  // Passwort via Supabase Auth verifizieren
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+  // Passwort via separatem Anon-Client prüfen (verhindert, dass der Service-Role-Client
+  // intern auf User-Token wechselt und dadurch RLS-Fehler bei DB-Writes entstehen)
+  const anonClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { auth: { persistSession: false } }
+  );
+
+  const { data: authData, error: authError } = await anonClient.auth.signInWithPassword({
     email,
     password,
   });
@@ -96,13 +103,18 @@ Deno.serve(async (req: Request) => {
   // Session-Token generieren und in admin_sessions speichern
   const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
-  await supabase.from('admin_sessions').insert({
+  const { error: insertError } = await supabase.from('admin_sessions').insert({
     admin_id: admin.id,
     session_token: token,
     ip_address: clientIp,
     totp_verified: false,
     expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
   });
+
+  if (insertError) {
+    console.error('[admin-login] Session INSERT Fehler:', JSON.stringify(insertError));
+    return json({ error: `Session-Fehler: ${insertError.message} (Code: ${insertError.code})` }, 500);
+  }
 
   await supabase.from('admin_audit_log').insert({
     admin_id: admin.id,

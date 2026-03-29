@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return new Response(JSON.stringify({"error":"Method not allowed"}),{status:405,headers:{"Content-Type":"application/json"}});
   }
 
   const token = req.headers.get('Authorization')?.replace('Bearer ', '');
@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (!sess || new Date(sess.expires_at) < new Date()) {
-    return new Response('Session expired', { status: 401 });
+    return new Response(JSON.stringify({"error":"Session abgelaufen"}),{status:401,headers:{"Content-Type":"application/json"}});
   }
 
   // Get admin user
