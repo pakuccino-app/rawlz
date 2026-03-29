@@ -1,6 +1,17 @@
-// web-admin/src/lib/api.ts  (FIX: ipAddress entfernt, TOTP-Header, sessionToken nach Verify)
+// web-admin/src/lib/api.ts
 
-const API_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+// Basis-Header für alle Supabase Edge Function Aufrufe
+function baseHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    ...extra,
+  };
+}
 
 export interface AdminUser {
   id: string;
@@ -28,7 +39,6 @@ export function getSessionToken(): string | null {
   return sessionToken;
 }
 
-// FIX 2: kein ipAddress mehr im Body (Edge Function liest IP aus Request-Headern)
 export async function adminLogin(email: string, password: string): Promise<{
   tempToken?: string;
   needsTotp?: boolean;
@@ -37,15 +47,14 @@ export async function adminLogin(email: string, password: string): Promise<{
   role?: string;
   error?: string;
 }> {
-  const response = await fetch(`${API_URL}/functions/v1/admin-login`, {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: baseHeaders(),
     body: JSON.stringify({ email, password }),
   });
   return response.json();
 }
 
-// FIX 4: Authorization-Header senden (nicht Body) – so erwartet es admin-totp-verify
 export async function adminTotpVerify(tempToken: string, totpCode: string): Promise<{
   sessionToken?: string;
   success?: boolean;
@@ -53,37 +62,27 @@ export async function adminTotpVerify(tempToken: string, totpCode: string): Prom
   displayName?: string;
   error?: string;
 }> {
-  const response = await fetch(`${API_URL}/functions/v1/admin-totp-verify`, {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-totp-verify`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${tempToken}`,
-    },
+    headers: baseHeaders({ 'Authorization': `Bearer ${tempToken}` }),
     body: JSON.stringify({ totpCode }),
   });
 
   const result = await response.json();
-
-  // FIX 5: sessionToken setzen → Dashboard-Navigation funktioniert
   if (result.sessionToken) {
     setSessionToken(result.sessionToken);
   }
-
   return result;
 }
 
-// FIX 4: Authorization-Header senden für admin-totp-setup
 export async function adminTotpSetup(tempToken: string): Promise<{
   otpauthUri?: string;
   manualCode?: string;
   error?: string;
 }> {
-  const response = await fetch(`${API_URL}/functions/v1/admin-totp-setup`, {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-totp-setup`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${tempToken}`,
-    },
+    headers: baseHeaders({ 'Authorization': `Bearer ${tempToken}` }),
     body: JSON.stringify({}),
   });
   return response.json();
@@ -93,12 +92,9 @@ export async function adminApi(action: string, payload?: any): Promise<any> {
   const token = getSessionToken();
   if (!token) throw new Error('Nicht angemeldet');
 
-  const response = await fetch(`${API_URL}/functions/v1/admin-api`, {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: baseHeaders({ 'Authorization': `Bearer ${token}` }),
     body: JSON.stringify({ action, payload }),
   });
 
@@ -111,19 +107,15 @@ export async function adminApi(action: string, payload?: any): Promise<any> {
   }
 
   if (result.error) throw new Error(result.error);
-
   return result;
 }
 
 export async function adminLogout(): Promise<void> {
   const token = getSessionToken();
   if (token) {
-    await fetch(`${API_URL}/functions/v1/admin-logout`, {
+    await fetch(`${SUPABASE_URL}/functions/v1/admin-logout`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: baseHeaders({ 'Authorization': `Bearer ${token}` }),
     }).catch(() => null);
   }
   setSessionToken(null);
