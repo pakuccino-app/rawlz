@@ -297,7 +297,7 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: #0A0A0A,
   },
   keyboardView: {
     flex: 1,
@@ -319,13 +319,13 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 32,
     fontWeight: '700',
-    color: COLORS.black,
+    color: '#FFFFFF',
     letterSpacing: 4,
     marginTop: -8,
   },
   tagline: {
     fontSize: 16,
-    color: COLORS.gray500,
+    color: '#9CA3AF',
     marginTop: 8,
   },
   authButtons: {
@@ -346,20 +346,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   googleButton: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#111827',
     borderWidth: 1,
-    borderColor: COLORS.gray300,
+    borderColor: '#374151',
   },
   googleButtonText: {
-    color: COLORS.black,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   emailButton: {
-    backgroundColor: COLORS.gray100,
+    backgroundColor: '#1F2937',
   },
   emailButtonText: {
-    color: COLORS.black,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -370,12 +370,12 @@ const styles = StyleSheet.create({
   input: {
     height: 52,
     borderWidth: 1,
-    borderColor: COLORS.gray300,
+    borderColor: '#374151',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: COLORS.black,
-    backgroundColor: COLORS.white,
+    color: '#FFFFFF',
+    backgroundColor: '#111827',
   },
   submitButton: {
     height: 52,
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   toggleText: {
-    color: COLORS.gray500,
+    color: '#9CA3AF',
     fontSize: 14,
   },
   gdprContainer: {
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   gdprText: {
     flex: 1,
     fontSize: 14,
-    color: COLORS.gray700,
+    color: '#D1D5DB',
     lineHeight: 20,
   },
 });
