@@ -17,8 +17,8 @@
       "supportsTablet": false,
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "RAWLZ benötigt Kamera-Zugriff für QR-Code-Scanning.",
-        "NSPhotoLibraryUsageDescription": "RAWLZ benötigt Foto-Zugriff zum Speichern von Share-Cards."
+        "NSCameraUsageDescription": "RAWLZ ben\u00f6tigt Kamera-Zugriff f\u00fcr QR-Code-Scanning.",
+        "NSPhotoLibraryUsageDescription": "RAWLZ ben\u00f6tigt Foto-Zugriff zum Speichern von Share-Cards."
       }
     },
     "android": {
@@ -75,6 +75,12 @@
         "projectId": "81a12998-c32a-4636-83e3-2cc28e1145fe"
       }
     },
-    "owner": "pakuccino"
+    "owner": "pakuccino",
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#111827",
+      "androidMode": "default",
+      "androidCollapsedTitle": "#{unread_notifications} neue Benachrichtigungen"
+    }
   }
 }
