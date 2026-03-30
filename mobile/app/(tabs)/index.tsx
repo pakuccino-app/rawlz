@@ -161,6 +161,22 @@ export default function SwipeScreen() {
         .eq('id', authUser.id)
         .single();
 
+      // User existiert noch nicht → anlegen (z.B. nach anonymem Login)
+      if (!userData) {
+        await supabase.from('users').insert({
+          id: authUser.id,
+          device_hash: authUser.id,
+          consent_given_at: new Date().toISOString(),
+          geo_preference: 'global',
+        });
+        const { data: newUser } = await supabase.from('users').select('*').eq('id', authUser.id).single();
+        if (newUser) {
+          setUser(newUser);
+          await loadQuestions(newUser);
+        }
+        return;
+      }
+
       if (userData) {
         setUser(userData);
         await loadQuestions(userData);
@@ -218,6 +234,9 @@ export default function SwipeScreen() {
       query = query.or(`geo_scope.eq.global,and(geo_scope.eq.country,geo_country.eq.${userData.geo_country})`);
     } else if (userData.geo_preference === 'region' && userData.geo_region) {
       query = query.or(`geo_scope.eq.global,and(geo_scope.eq.region,geo_region.eq.${userData.geo_region})`);
+    } else {
+      // Kein geo_preference gesetzt → global anzeigen
+      query = query.eq('geo_scope', 'global');
     }
 
     query = query.order('total_votes', { ascending: false }).limit(30);

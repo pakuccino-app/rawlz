@@ -30,9 +30,25 @@ export default function RootLayout() {
         // Preload sounds
         await preloadSounds();
         
-        // Check initial auth state
+        // Check initial auth state – auto sign-in anonym wenn keine Session
         const { data: { session } } = await supabase.auth.getSession();
-        setIsAuthenticated(!!session);
+
+        if (!session) {
+          // Anonym einloggen (kein Account nötig)
+          const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+          if (!anonError && anonData.user) {
+            // User-Row anlegen falls noch nicht vorhanden
+            await supabase.from('users').upsert({
+              id: anonData.user.id,
+              device_hash: anonData.user.id, // Fallback
+              consent_given_at: new Date().toISOString(),
+              geo_preference: 'global',
+            }, { onConflict: 'id', ignoreDuplicates: true });
+            setIsAuthenticated(true);
+          }
+        } else {
+          setIsAuthenticated(true);
+        }
       } catch (error) {
         console.error('Initialization error:', error);
       } finally {
