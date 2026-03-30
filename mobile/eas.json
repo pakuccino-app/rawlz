@@ -9,7 +9,8 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "node": "20.18.0"
     },
     "preview": {
       "distribution": "internal",
@@ -18,13 +19,15 @@
       },
       "ios": {
         "simulator": false
-      }
+      },
+      "node": "20.18.0"
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
-      }
+      },
+      "node": "20.18.0"
     }
   },
   "submit": {
