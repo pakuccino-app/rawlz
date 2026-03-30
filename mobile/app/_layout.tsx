@@ -30,20 +30,36 @@ export default function RootLayout() {
         // Preload sounds
         await preloadSounds();
         
-        // Check initial auth state – auto sign-in anonym wenn keine Session
+        // Check initial auth state – auto sign-in wenn keine Session
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
-          // Anonym einloggen (kein Account nötig)
-          const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
-          if (!anonError && anonData.user) {
-            // User-Row anlegen falls noch nicht vorhanden
-            await supabase.from('users').upsert({
-              id: anonData.user.id,
-              device_hash: anonData.user.id, // Fallback
-              consent_given_at: new Date().toISOString(),
-              geo_preference: 'global',
-            }, { onConflict: 'id', ignoreDuplicates: true });
+          // Device-spezifisches Auto-Login (funktioniert in allen supabase-js Versionen)
+          const { generateDeviceHash } = await import('../lib/hashing');
+          const deviceHash = await generateDeviceHash();
+          const anonEmail = `anon_${deviceHash.slice(0, 20)}@rawlz.internal`;
+          const anonPassword = deviceHash.slice(0, 32);
+
+          // Erst versuchen einzuloggen, dann registrieren
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: anonEmail, password: anonPassword,
+          });
+
+          if (signInError) {
+            // Noch nicht registriert – jetzt registrieren
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email: anonEmail, password: anonPassword,
+            });
+            if (!signUpError && signUpData.user) {
+              await supabase.from('users').upsert({
+                id: signUpData.user.id,
+                device_hash: deviceHash,
+                consent_given_at: new Date().toISOString(),
+                geo_preference: 'global',
+              }, { onConflict: 'id', ignoreDuplicates: true });
+              setIsAuthenticated(true);
+            }
+          } else if (signInData.user) {
             setIsAuthenticated(true);
           }
         } else {
