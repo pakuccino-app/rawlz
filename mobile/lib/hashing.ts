@@ -3,11 +3,10 @@
 // INV-04: Email + Device ID → SHA-256 BEFORE any DB write
 
 import * as Crypto from 'expo-crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-/**
- * Hash a string using SHA-256
- * Used for device_hash and email_hash before storing in DB
- */
+const DEVICE_ID_KEY = 'rawlz_device_id';
+
 export async function sha256(input: string): Promise<string> {
   const hash = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
@@ -16,34 +15,32 @@ export async function sha256(input: string): Promise<string> {
   return hash;
 }
 
-/**
- * Hash an email address (lowercase + trim)
- */
 export async function hashEmail(email: string): Promise<string> {
-  const normalized = email.toLowerCase().trim();
-  return sha256(normalized);
+  return sha256(email.toLowerCase().trim());
 }
 
-/**
- * Hash a device ID
- */
 export async function hashDeviceId(deviceId: string): Promise<string> {
   return sha256(deviceId);
 }
 
 /**
- * Generate a unique device hash
- * Combines multiple device identifiers for uniqueness
+ * Returns a PERSISTENT device hash.
+ * On first call: generates a UUID, stores in AsyncStorage, returns its hash.
+ * On subsequent calls: reads stored UUID, returns its hash.
+ * This ensures the same device always gets the same hash (until app deletion).
  */
 export async function generateDeviceHash(): Promise<string> {
-  // In production, use a combination of:
-  // - expo-application's getInstallationIdAsync()
-  // - expo-device's deviceName, osName, osVersion
-  // For now, generate a random UUID-like identifier
-  const randomPart = Array.from(
-    { length: 32 },
-    () => Math.random().toString(36)[2]
-  ).join('');
-  
-  return sha256(randomPart + Date.now().toString());
+  // Try to read existing device ID
+  let deviceId = await AsyncStorage.getItem(DEVICE_ID_KEY);
+
+  if (!deviceId) {
+    // Generate a new device ID using crypto-grade randomness (INV-04)
+    const randomBytes = await Crypto.getRandomBytesAsync(32);
+    deviceId = Array.from(randomBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    await AsyncStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+
+  return sha256(deviceId);
 }
