@@ -780,7 +780,7 @@ export default function SwipeScreen() {
               <View style={styles.cloudOptionIcon}>
                 <Text style={styles.cloudOptionEmoji}>🔍</Text>
               </View>
-              <View style={styles.cloudOptionText}>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_search')}</Text>
                 <Text style={styles.cloudOptionSub}>Abstimmungen finden & vergleichen</Text>
               </View>
@@ -790,7 +790,7 @@ export default function SwipeScreen() {
               <View style={styles.cloudOptionIcon}>
                 <Text style={styles.cloudOptionEmoji}>💡</Text>
               </View>
-              <View style={styles.cloudOptionText}>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_suggest')}</Text>
                 <Text style={styles.cloudOptionSub}>Wort vorschlagen · Autocomplete</Text>
               </View>
@@ -800,7 +800,7 @@ export default function SwipeScreen() {
               <View style={styles.cloudOptionIcon}>
                 <Text style={styles.cloudOptionEmoji}>📊</Text>
               </View>
-              <View style={styles.cloudOptionText}>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_results')}</Text>
                 <Text style={styles.cloudOptionSub}>Markieren · Zusammenstellen · Teilen</Text>
               </View>
@@ -832,37 +832,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: COLORS.white,
-  },
-  emptyText: {
-    fontSize: 18,
-    color: COLORS.gray500,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  reloadButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    backgroundColor: COLORS.black,
-    borderRadius: 30,
-  },
-  reloadButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  // Header
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -886,86 +855,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 4,
   },
-  streakIcon: {
-    fontSize: 14,
-  },
-  streakCount: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  // Offline
-  offlineBanner: {
-    backgroundColor: '#78350F',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  offlineBannerText: {
-    fontSize: 12,
-    color: '#FCD34D',
-    fontWeight: '600',
-  },
-  // Flash
-  flashOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 100,
-    opacity: 0.25,
-  },
-  // Result
-  resultOverlay: {
-    position: 'absolute',
-    top: '38%',
-    left: 32,
-    right: 32,
-    backgroundColor: '#111827',
-    borderRadius: 20,
-    padding: 28,
-    alignItems: 'center',
-    zIndex: 50,
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  resultText: {
-    fontSize: 20,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  // Swipe card – Light Mode
-  card: {
-    flex: 1,
-    margin: 16,
-    marginTop: 8,
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
-  },
-  // Vote indicators
-  voteIndicator: {
-    position: 'absolute',
-    top: 32,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 3,
-  },
-  yesIndicator: {
-    right: 20,
-    borderColor: '#10B981',
-  },
-  noIndicator: {
-    left: 20,
-    borderColor: '#EF4444',
-  },
   yesText: {
     fontSize: 22,
     fontWeight: '800',
@@ -978,20 +867,6 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     letterSpacing: 2,
   },
-  voteIndicatorText: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  // Word
-  wordText: {
-    fontWeight: '900',
-    color: COLORS.black,
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-  // Swipe hints
   swipeHints: {
     position: 'absolute',
     bottom: 24,
@@ -1011,172 +886,16 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontWeight: '500',
   },
-  tapHint: {
-    position: 'absolute',
-    bottom: 60,
-    fontSize: 20,
-    color: '#374151',
-  },
-  // AI Overlay – erscheint bei TAP auf die Karte
-  aiOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(26, 26, 46, 0.97)',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    padding: 24,
-    maxHeight: '60%',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(212, 175, 55, 0.3)',
-  },
   aiHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  aiTitle: {
-    fontSize: 13,
-    color: '#F59E0B',
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
   aiClose: {
     fontSize: 22,
     color: '#6B7280',
     fontWeight: '300',
-  },
-  aiSentence: {
-    fontSize: 16,
-    color: '#F3F4F6',
-    marginBottom: 16,
-    lineHeight: 26,
-  },
-  aiBullet: {
-    fontSize: 14,
-    color: '#D1D5DB',
-    marginBottom: 8,
-    lineHeight: 22,
-    paddingLeft: 4,
-  },
-  aiSource: {
-    fontSize: 11,
-    color: '#4B5563',
-    marginTop: 16,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  // Bottom sheet
-  bottomSheetOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    zIndex: 200,
-  },
-  bottomSheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  bottomSheet: {
-    backgroundColor: '#111827',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-    borderTopWidth: 1,
-    borderTopColor: '#1F2937',
-  },
-  sheetOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F2937',
-  },
-  sheetOptionIcon: {
-    fontSize: 22,
-    marginRight: 16,
-  },
-  sheetOptionText: {
-    fontSize: 16,
-    color: '#F3F4F6',
-    fontWeight: '500',
-  },
-  sheetCancel: {
-    justifyContent: 'center',
-    borderBottomWidth: 0,
-    marginTop: 8,
-  },
-  sheetCancelText: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  // Bottom sheet – Light Mode
-  bottomSheetOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    zIndex: 200,
-  },
-  bottomSheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  bottomSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
-  },
-  sheetOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  sheetOptionIcon: {
-    fontSize: 22,
-    marginRight: 16,
-  },
-  sheetOptionText: {
-    fontSize: 16,
-    color: COLORS.black,
-    fontWeight: '500',
-  },
-  sheetCancel: {
-    justifyContent: 'center',
-    borderBottomWidth: 0,
-    marginTop: 8,
-  },
-  sheetCancelText: {
-    fontSize: 16,
-    color: COLORS.gray500,
-    textAlign: 'center',
-  },
-  // Cloud Menu (Wolke)
-  cloudMenuOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    zIndex: 200,
-  },
-  cloudBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  cloudMenu: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 24,
-    paddingBottom: 48,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
   },
   cloudHeader: {
     flexDirection: 'row',
@@ -1196,27 +915,8 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     padding: 4,
   },
-  cloudOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  cloudOptionIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: COLORS.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
   cloudOptionEmoji: {
     fontSize: 24,
-  },
-  cloudOptionText: {
-    flex: 1,
   },
   cloudOptionLabel: {
     fontSize: 18,
@@ -1228,54 +928,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.gray500,
   },
-  // Bottom Bar (Streak · Geo · Settings)
-  bottomBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
-    backgroundColor: COLORS.white,
-  },
-  streakContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  streakIcon: {
-    fontSize: 22,
-  },
-  streakCount: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.black,
-  },
-  geoButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  geoIcon: {
-    fontSize: 22,
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingsIcon: {
-    fontSize: 20,
-    color: COLORS.black,
-  },
-});
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1506,36 +1158,39 @@ const styles = StyleSheet.create({
   },
   cloudMenuOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
     zIndex: 200,
   },
   cloudBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   cloudMenu: {
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
-    padding: 32,
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 48,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   cloudOption: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   cloudOptionIcon: {
-    fontSize: 32,
-    marginRight: 20,
+    fontSize: 28,
+    marginRight: 16,
+    width: 44,
+    textAlign: 'center',
   },
   cloudOptionText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.black,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111111',
   },
-});
+
+});;

@@ -329,7 +329,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: #0A0A0A,
+    backgroundColor: '#0A0A0A',
   },
   loadingContainer: {
     flex: 1,
@@ -349,34 +349,34 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.gray100,
+    backgroundColor: '#1F2937',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
   backButtonText: {
     fontSize: 24,
-    color: COLORS.black,
+    color: '#FFFFFF',
   },
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: COLORS.black,
+    color: '#FFFFFF',
   },
   privacyNotice: {
-    backgroundColor: COLORS.gray100,
+    backgroundColor: '#1F2937',
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
   },
   privacyText: {
     fontSize: 13,
-    color: COLORS.gray500,
+    color: '#9CA3AF',
     lineHeight: 20,
   },
   tierContainer: {
     marginBottom: 16,
-    backgroundColor: COLORS.gray100,
+    backgroundColor: '#1F2937',
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -389,16 +389,16 @@ const styles = StyleSheet.create({
   tierTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: COLORS.black,
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   tierProgress: {
     fontSize: 13,
-    color: COLORS.gray500,
+    color: '#9CA3AF',
   },
   tierArrow: {
     fontSize: 16,
-    color: COLORS.gray500,
+    color: '#9CA3AF',
   },
   tierContent: {
     padding: 20,
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.black,
+    color: '#FFFFFF',
   },
   bonusPreview: {
     fontSize: 12,
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   optionButton: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#111827',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
   },
   optionButtonText: {
     fontSize: 14,
-    color: COLORS.black,
+    color: '#FFFFFF',
   },
   optionButtonTextSelected: {
     color: COLORS.white,
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   },
   sliderLabel: {
     fontSize: 12,
-    color: COLORS.gray500,
+    color: '#9CA3AF',
     width: 50,
     textAlign: 'center',
   },
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
   },
   skipButtonText: {
     fontSize: 13,
-    color: COLORS.gray500,
+    color: '#9CA3AF',
     textDecorationLine: 'underline',
   },
   savingIndicator: {
