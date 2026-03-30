@@ -164,7 +164,7 @@ export default function SettingsScreen() {
     await hapticPatterns.tap();
   }
 
-  async function handleLanguageChange(lang: string) {
+  async function handleLanguageChange(lang: 'de' | 'en') {
     setLanguage(lang);
     await updateUserSetting('language_code', lang);
     await changeLanguage(lang);

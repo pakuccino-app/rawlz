@@ -550,9 +550,8 @@ export default function SearchScreen() {
           .not('questions.axis_y', 'is', null);
 
         const calibratedVotes = (votes || []).map((v: any) => ({
-          vote: v.vote_value as 'yes' | 'no',
-          axis_x: v.questions.axis_x,
-          axis_y: v.questions.axis_y,
+          vote_value: v.vote_value as string,
+          questions: { axis_x: v.questions.axis_x, axis_y: v.questions.axis_y },
         }));
 
         if (calibratedVotes.length >= 10) {

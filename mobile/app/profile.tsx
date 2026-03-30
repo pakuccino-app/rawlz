@@ -176,7 +176,7 @@ export default function ProfileScreen() {
               maximumValue={field.max}
               step={1}
               value={currentValue || 3}
-              onSlidingComplete={(value) => saveField(field.key, value, field.bonus)}
+              onSlidingComplete={(value: number) => saveField(field.key, value, field.bonus)}
               minimumTrackTintColor={COLORS.gold}
               maximumTrackTintColor={COLORS.gray200}
               thumbTintColor={COLORS.gold}

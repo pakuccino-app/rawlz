@@ -190,7 +190,7 @@ export default function SwipeScreen() {
       if (cached.dailyPulse) {
         questions = [cached.dailyPulse, ...questions.filter(q => q.id !== cached.dailyPulse?.id)];
       }
-      setQuestions(questions);
+      setQuestions(questions as any);
       setCurrentIndex(0);
       return;
     }

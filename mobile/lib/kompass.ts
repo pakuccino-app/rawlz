@@ -3,7 +3,7 @@
 
 import { supabase } from './supabase';
 
-interface KompassResult {
+export interface KompassResult {
   x: number;
   y: number;
   calibratedVotes: number;
@@ -107,4 +107,21 @@ export async function getKompassProgress(userId: string): Promise<number> {
     .in('vote_value', ['yes', 'no']);
 
   return count || 0;
+}
+
+/** Alias für search.tsx Kompatibilität */
+export function calculateKompass(calibratedVotes: {
+  vote_value: string;
+  questions: { axis_x: number; axis_y: number };
+}[]): KompassResult | null {
+  if (!calibratedVotes || calibratedVotes.length < 10) return null;
+  let sumX = 0, sumY = 0;
+  for (const vote of calibratedVotes) {
+    const m = vote.vote_value === 'yes' ? 1 : -1;
+    sumX += vote.questions.axis_x * m;
+    sumY += vote.questions.axis_y * m;
+  }
+  const x = sumX / calibratedVotes.length;
+  const y = sumY / calibratedVotes.length;
+  return { x, y, calibratedVotes: calibratedVotes.length, quadrant: getKompassQuadrant(x, y) };
 }
