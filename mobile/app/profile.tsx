@@ -92,13 +92,19 @@ export default function ProfileScreen() {
 
       const { data } = await supabase
         .from('users')
-        .select('id, membership_type, profile_data')
+        .select('id, membership_type, trust_score, streak_count')
         .eq('id', authUser.id)
         .single();
 
       if (data) {
         setUser({ id: data.id, membership_type: data.membership_type });
-        setProfile(data.profile_data || {});
+        // user_profiles Tabelle lesen (per Spezifikation)
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', authUser.id)
+          .maybeSingle();
+        setProfile(profileData || {});
       }
     } catch (error) {
       console.error('Load profile error:', error);
@@ -119,10 +125,11 @@ export default function ProfileScreen() {
       // Check if this field was previously empty (for trust bonus)
       const wasEmpty = !profile[key];
 
+      // user_profiles UPSERT (per Spezifikation)
       await supabase
-        .from('users')
-        .update({ profile_data: newProfile })
-        .eq('id', user.id);
+        .from('user_profiles')
+        .upsert({ user_id: user.id, [key]: value, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' });
 
       // Grant trust bonus if first time filling this field
       if (wasEmpty && value) {
@@ -141,9 +148,9 @@ export default function ProfileScreen() {
 
         await supabase.from('trust_score_history').insert({
           user_id: user.id,
-          change_amount: bonus,
+          delta: bonus,
           reason: `profile_field_${key}`,
-          new_score: newScore,
+          score_after: newScore,
         });
       }
 

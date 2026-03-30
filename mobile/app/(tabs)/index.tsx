@@ -72,6 +72,8 @@ interface User {
   geo_region?: string;
   geo_preference: string;
   streak_count: number;
+  active_days_count: number;
+  last_active_date?: string;
   wirksamkeit_shown: boolean;
 }
 
@@ -161,11 +163,13 @@ export default function SwipeScreen() {
         .eq('id', authUser.id)
         .single();
 
-      // User existiert noch nicht → anlegen (z.B. nach anonymem Login)
+      // User existiert noch nicht → anlegen
       if (!userData) {
+        const { generateDeviceHash } = await import('../../lib/hashing');
+        const deviceHash = await generateDeviceHash();
         await supabase.from('users').insert({
           id: authUser.id,
-          device_hash: authUser.id,
+          device_hash: deviceHash,
           consent_given_at: new Date().toISOString(),
           geo_preference: 'global',
         });
@@ -309,6 +313,23 @@ export default function SwipeScreen() {
       });
 
       if (error) throw error;
+
+      // Streak + active_days_count aktualisieren
+      const today = new Date().toISOString().split('T')[0];
+      if (user.last_active_date !== today) {
+        const isConsecutive = user.last_active_date === 
+          new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        await supabase.from('users').update({
+          last_active_date: today,
+          active_days_count: (user.active_days_count || 0) + 1,
+          streak_count: isConsecutive ? (user.streak_count || 0) + 1 : 1,
+        }).eq('id', user.id);
+        setUser(prev => prev ? {
+          ...prev,
+          last_active_date: today,
+          streak_count: isConsecutive ? (prev.streak_count || 0) + 1 : 1,
+        } : null);
+      }
 
       // Get updated counts for yes/no votes
       if (voteValue === 'yes' || voteValue === 'no') {
