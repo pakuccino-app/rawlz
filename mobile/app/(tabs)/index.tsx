@@ -417,14 +417,18 @@ export default function SwipeScreen() {
       setTimeout(() => setFlashColor(null), ANIMATIONS.flash);
       await submitVote('no');
     } else if (direction === 'down') {
+      // DEEP DIVE: KI-Fakten-Overlay anzeigen (laut Konzept: Swipe ↓ = Deep Dive)
+      await hapticPatterns.tap();
+      await playSound('deepDive');
+      await submitVote('deep_dive');
+      // KI direkt laden und anzeigen
+      setShowAIOverlay(true);
+      loadAIContent();
+    } else if (direction === 'up') {
+      // ARCHIV: Frage überspringen (laut Konzept: Swipe ↑ = Archiv)
       await hapticPatterns.archive();
       await playSound('archive');
       setShowBottomSheet(true);
-    } else if (direction === 'up') {
-      await hapticPatterns.cloud();
-      await playSound('deepDive');
-      setShowCloudMenu(true);
-      await submitVote('deep_dive');
     }
   }, [currentQuestion, user]);
 
@@ -449,12 +453,14 @@ export default function SwipeScreen() {
           velocity: velocityX,
         });
         runOnJS(handleSwipeComplete)(direction);
+      } else if (translationY > SWIPE_THRESHOLD || velocityY > 500) {
+        // Swipe DOWN (translationY positiv = nach unten) → Deep Dive
+        translateY.value = withSpring(SCREEN_HEIGHT, { velocity: velocityY });
+        runOnJS(handleSwipeComplete)('down');
       } else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
+        // Swipe UP (translationY negativ = nach oben) → Archiv
         translateY.value = withSpring(-SCREEN_HEIGHT, { velocity: velocityY });
         runOnJS(handleSwipeComplete)('up');
-      } else if (translationY > SWIPE_THRESHOLD || velocityY > 500) {
-        translateY.value = withSpring(SCREEN_HEIGHT / 3, { velocity: velocityY });
-        runOnJS(handleSwipeComplete)('down');
       } else {
         translateX.value = withSpring(0);
         translateY.value = withSpring(0);
@@ -590,9 +596,9 @@ export default function SwipeScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.black} />
+          <ActivityIndicator size="large" color="#FFFFFF" />
         </View>
       </SafeAreaView>
     );
@@ -600,9 +606,10 @@ export default function SwipeScreen() {
 
   if (!currentQuestion) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>{t('swipe.no_more_questions')}</Text>
+          <Text style={styles.appLogo}>#RAWLZ</Text>
+          <Text style={[styles.emptyText, { marginTop: 24 }]}>{t('swipe.no_more_questions')}</Text>
           <TouchableOpacity style={styles.reloadButton} onPress={loadData}>
             <Text style={styles.reloadButtonText}>{t('errors.try_again')}</Text>
           </TouchableOpacity>
@@ -616,7 +623,16 @@ export default function SwipeScreen() {
   const isDailyPulse = currentQuestion.is_daily_pulse;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Streak-Anzeige oben rechts */}
+      <View style={styles.headerBar}>
+        <Text style={styles.appLogo}>#RAWLZ</Text>
+        <View style={styles.streakPill}>
+          <Text style={styles.streakIcon}>🔥</Text>
+          <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
+        </View>
+      </View>
+
       {/* Offline indicator */}
       {!isOnline && (
         <View style={styles.offlineBanner}>
@@ -651,54 +667,53 @@ export default function SwipeScreen() {
             <DailyPulseCard word={currentQuestion.word} style={StyleSheet.absoluteFill} />
           ) : (
             <>
-              {/* Yes indicator */}
+              {/* Swipe-Hinweise */}
               <Animated.View style={[styles.voteIndicator, styles.yesIndicator, yesIndicatorStyle]}>
-                <Text style={styles.voteIndicatorText}>{t('swipe.yes')}</Text>
+                <Text style={styles.yesText}>JA</Text>
               </Animated.View>
-
-              {/* No indicator */}
               <Animated.View style={[styles.voteIndicator, styles.noIndicator, noIndicatorStyle]}>
-                <Text style={styles.voteIndicatorText}>{t('swipe.no')}</Text>
+                <Text style={styles.noText}>NEIN</Text>
               </Animated.View>
 
-              {/* Question word */}
+              {/* Frage-Wort */}
               <Text style={[styles.wordText, { fontSize }]}>
                 {currentQuestion.word}
               </Text>
 
-              {/* Tap hint */}
-              <Text style={styles.tapHint}>?</Text>
+              {/* Swipe-Anleitung */}
+              <View style={styles.swipeHints}>
+                <Text style={styles.swipeHintUp}>↑ Archiv</Text>
+                <Text style={styles.swipeHintDown}>↓ KI-Info</Text>
+              </View>
             </>
           )}
 
-          {/* AI Overlay */}
+          {/* AI Overlay (Swipe Down = Deep Dive laut Konzept) */}
           {showAIOverlay && aiContent && (
             <View style={styles.aiOverlay}>
-              <Text style={styles.aiTitle}>{t('ai.title')}</Text>
+              <View style={styles.aiHeader}>
+                <Text style={styles.aiTitle}>KI-FAKTEN</Text>
+                <TouchableOpacity onPress={() => setShowAIOverlay(false)}>
+                  <Text style={styles.aiClose}>×</Text>
+                </TouchableOpacity>
+              </View>
               <Text style={styles.aiSentence}>{aiContent.sentence}</Text>
               {aiContent.bullets?.map((bullet: string, i: number) => (
                 <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
               ))}
-              <Text style={styles.aiSource}>{t('ai.source')}</Text>
+              <Text style={styles.aiSource}>Quelle: KI-Analyse (GPT-4o-mini)</Text>
             </View>
           )}
         </Animated.View>
       </GestureDetector>
 
-      {/* Bottom bar */}
-      <View style={styles.bottomBar}>
-        <View style={styles.streakContainer}>
+      {/* Streak-Anzeige oben rechts */}
+      <View style={styles.headerBar}>
+        <Text style={styles.appLogo}>#RAWLZ</Text>
+        <View style={styles.streakPill}>
           <Text style={styles.streakIcon}>🔥</Text>
           <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
         </View>
-
-        <TouchableOpacity style={styles.geoButton}>
-          <Text style={styles.geoIcon}>🌍</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.settingsButton}>
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Bottom Sheet */}
@@ -732,30 +747,6 @@ export default function SwipeScreen() {
         </View>
       )}
 
-      {/* Cloud Menu */}
-      {showCloudMenu && (
-        <View style={styles.cloudMenuOverlay}>
-          <TouchableOpacity 
-            style={styles.cloudBackdrop}
-            onPress={() => setShowCloudMenu(false)}
-          />
-          <View style={styles.cloudMenu}>
-            <TouchableOpacity style={styles.cloudOption}>
-              <Text style={styles.cloudOptionIcon}>🔍</Text>
-              <Text style={styles.cloudOptionText}>{t('swipe.cloud_search')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cloudOption}>
-              <Text style={styles.cloudOptionIcon}>💡</Text>
-              <Text style={styles.cloudOptionText}>{t('swipe.cloud_suggest')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cloudOption}>
-              <Text style={styles.cloudOptionIcon}>📊</Text>
-              <Text style={styles.cloudOptionText}>{t('swipe.cloud_results')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
       {/* Wirksamkeit Overlay */}
       <WirksamkeitOverlay
         visible={showWirksamkeit}
@@ -777,8 +768,301 @@ export default function SwipeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#0A0A0A',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0A0A0A',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: '#0A0A0A',
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  reloadButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 30,
+  },
+  reloadButtonText: {
+    color: '#000000',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  // Header
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  appLogo: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F2937',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
+  },
+  streakIcon: {
+    fontSize: 14,
+  },
+  streakCount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  // Offline
+  offlineBanner: {
+    backgroundColor: '#78350F',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#FCD34D',
+    fontWeight: '600',
+  },
+  // Flash
+  flashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    opacity: 0.25,
+  },
+  // Result
+  resultOverlay: {
+    position: 'absolute',
+    top: '38%',
+    left: 32,
+    right: 32,
+    backgroundColor: '#111827',
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    zIndex: 50,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  resultText: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  // Swipe card
+  card: {
+    flex: 1,
+    margin: 16,
+    marginTop: 8,
+    backgroundColor: '#111827',
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1F2937',
+  },
+  // Vote indicators
+  voteIndicator: {
+    position: 'absolute',
+    top: 32,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 3,
+  },
+  yesIndicator: {
+    right: 20,
+    borderColor: '#10B981',
+  },
+  noIndicator: {
+    left: 20,
+    borderColor: '#EF4444',
+  },
+  yesText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 2,
+  },
+  noText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#EF4444',
+    letterSpacing: 2,
+  },
+  voteIndicatorText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+  },
+  // Word
+  wordText: {
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    letterSpacing: -0.5,
+  },
+  // Swipe hints
+  swipeHints: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 40,
+  },
+  swipeHintUp: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  swipeHintDown: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  tapHint: {
+    position: 'absolute',
+    bottom: 60,
+    fontSize: 20,
+    color: '#374151',
+  },
+  // AI Overlay
+  aiOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(17, 24, 39, 0.97)',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    padding: 24,
+    maxHeight: '65%',
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  aiHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  aiTitle: {
+    fontSize: 13,
+    color: '#F59E0B',
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  aiClose: {
+    fontSize: 22,
+    color: '#6B7280',
+    fontWeight: '300',
+  },
+  aiSentence: {
+    fontSize: 16,
+    color: '#F3F4F6',
+    marginBottom: 16,
+    lineHeight: 26,
+  },
+  aiBullet: {
+    fontSize: 14,
+    color: '#D1D5DB',
+    marginBottom: 8,
+    lineHeight: 22,
+    paddingLeft: 4,
+  },
+  aiSource: {
+    fontSize: 11,
+    color: '#4B5563',
+    marginTop: 16,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  // Bottom sheet
+  bottomSheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 200,
+  },
+  bottomSheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  bottomSheet: {
+    backgroundColor: '#111827',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    borderTopWidth: 1,
+    borderTopColor: '#1F2937',
+  },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2937',
+  },
+  sheetOptionIcon: {
+    fontSize: 22,
+    marginRight: 16,
+  },
+  sheetOptionText: {
+    fontSize: 16,
+    color: '#F3F4F6',
+    fontWeight: '500',
+  },
+  sheetCancel: {
+    justifyContent: 'center',
+    borderBottomWidth: 0,
+    marginTop: 8,
+  },
+  sheetCancelText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  // Dummy (removed cloud menu)
+  cloudMenuOverlay: {},
+  cloudBackdrop: {},
+  cloudMenu: {},
+  cloudOption: {},
+  cloudOptionIcon: {},
+  cloudOptionText: {},
+  // Removed bottom bar
+  bottomBar: { display: 'none' },
+  streakContainer: {},
+  geoButton: {},
+  geoIcon: {},
+  settingsButton: {},
+  settingsIcon: {},
+});
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -1,87 +1,59 @@
 // app/(tabs)/_layout.tsx
-// Main app tabs layout
+// Dark-Mode Tab-Bar – konzeptkonform, keine Emoji-Icons
 
 import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet } from 'react-native';
-import { useTranslation } from 'react-i18next';
+import { Platform } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { COLORS } from '../../lib/constants';
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: { [key: string]: string } = {
-    swipe: '#',
-    search: '🔍',
-    settings: '⚙️',
-  };
-
-  return (
-    <View style={[styles.tabIcon, focused && styles.tabIconFocused]}>
-      <Text style={[styles.tabIconText, focused && styles.tabIconTextFocused]}>
-        {icons[name] || '?'}
-      </Text>
-    </View>
-  );
-}
+const TAB_BAR_BG  = '#0A0A0A';
+const TAB_ACTIVE  = '#FFFFFF';
+const TAB_INACTIVE = '#4B5563';
+const TAB_BORDER  = '#1F2937';
 
 export default function TabsLayout() {
-  const { t } = useTranslation();
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          backgroundColor: TAB_BAR_BG,
+          borderTopColor: TAB_BORDER,
+          borderTopWidth: 1,
+          height: Platform.OS === 'ios' ? 84 : 64,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+          paddingTop: 8,
+        },
         tabBarShowLabel: false,
-        tabBarActiveTintColor: COLORS.black,
-        tabBarInactiveTintColor: COLORS.gray500,
+        tabBarActiveTintColor: TAB_ACTIVE,
+        tabBarInactiveTintColor: TAB_INACTIVE,
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name="swipe" focused={focused} />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="layers" size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name="search" focused={focused} />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="search" size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name="settings" focused={focused} />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="user" size={24} color={color} />
+          ),
         }}
       />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
-    height: 80,
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
-  tabIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.gray100,
-  },
-  tabIconFocused: {
-    backgroundColor: COLORS.black,
-  },
-  tabIconText: {
-    fontSize: 20,
-    color: COLORS.gray500,
-  },
-  tabIconTextFocused: {
-    color: COLORS.white,
-  },
-});
