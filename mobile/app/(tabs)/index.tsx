@@ -417,18 +417,16 @@ export default function SwipeScreen() {
       setTimeout(() => setFlashColor(null), ANIMATIONS.flash);
       await submitVote('no');
     } else if (direction === 'down') {
-      // DEEP DIVE: KI-Fakten-Overlay anzeigen (laut Konzept: Swipe ↓ = Deep Dive)
-      await hapticPatterns.tap();
-      await playSound('deepDive');
-      await submitVote('deep_dive');
-      // KI direkt laden und anzeigen
-      setShowAIOverlay(true);
-      loadAIContent();
-    } else if (direction === 'up') {
-      // ARCHIV: Frage überspringen (laut Konzept: Swipe ↑ = Archiv)
+      // INV-12: Swipe Down = Bottom Sheet (Archivieren / Später anzeigen)
       await hapticPatterns.archive();
       await playSound('archive');
       setShowBottomSheet(true);
+    } else if (direction === 'up') {
+      // Swipe Up = Wolke (Cloud Menu: Suche, Vorschlagen, Ergebnisse)
+      await hapticPatterns.cloud();
+      await playSound('deepDive');
+      setShowCloudMenu(true);
+      await submitVote('deep_dive');
     }
   }, [currentQuestion, user]);
 
@@ -454,11 +452,11 @@ export default function SwipeScreen() {
         });
         runOnJS(handleSwipeComplete)(direction);
       } else if (translationY > SWIPE_THRESHOLD || velocityY > 500) {
-        // Swipe DOWN (translationY positiv = nach unten) → Deep Dive
+        // Swipe DOWN → Bottom Sheet
         translateY.value = withSpring(SCREEN_HEIGHT, { velocity: velocityY });
         runOnJS(handleSwipeComplete)('down');
       } else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
-        // Swipe UP (translationY negativ = nach oben) → Archiv
+        // Swipe UP → Cloud Menu (Wolke)
         translateY.value = withSpring(-SCREEN_HEIGHT, { velocity: velocityY });
         runOnJS(handleSwipeComplete)('up');
       } else {
@@ -633,6 +631,20 @@ export default function SwipeScreen() {
         </View>
       </View>
 
+      {/* Custom Bottom Bar: Streak · Geo-Filter · Settings */}
+      <View style={styles.bottomBar}>
+        <View style={styles.streakContainer}>
+          <Text style={styles.streakIcon}>🔥</Text>
+          <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
+        </View>
+        <TouchableOpacity style={styles.geoButton}>
+          <Text style={styles.geoIcon}>🌍</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.settingsButton} onPress={() => {}}>
+          <Text style={styles.settingsIcon}>⚙</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Offline indicator */}
       {!isOnline && (
         <View style={styles.offlineBanner}>
@@ -747,6 +759,56 @@ export default function SwipeScreen() {
         </View>
       )}
 
+      {/* Cloud Menu (Wolke) – Swipe UP: Suche · Vorschlagen · Ergebnisse */}
+      {showCloudMenu && (
+        <View style={styles.cloudMenuOverlay}>
+          <TouchableOpacity
+            style={styles.cloudBackdrop}
+            onPress={() => setShowCloudMenu(false)}
+          />
+          <View style={styles.cloudMenu}>
+            {/* Header */}
+            <View style={styles.cloudHeader}>
+              <Text style={styles.cloudTitle}>#RAWLZ</Text>
+              <TouchableOpacity onPress={() => setShowCloudMenu(false)}>
+                <Text style={styles.cloudClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 3 große Tap-Targets */}
+            <TouchableOpacity style={styles.cloudOption} onPress={() => setShowCloudMenu(false)}>
+              <View style={styles.cloudOptionIcon}>
+                <Text style={styles.cloudOptionEmoji}>🔍</Text>
+              </View>
+              <View style={styles.cloudOptionText}>
+                <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_search')}</Text>
+                <Text style={styles.cloudOptionSub}>Abstimmungen finden & vergleichen</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cloudOption} onPress={() => setShowCloudMenu(false)}>
+              <View style={styles.cloudOptionIcon}>
+                <Text style={styles.cloudOptionEmoji}>💡</Text>
+              </View>
+              <View style={styles.cloudOptionText}>
+                <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_suggest')}</Text>
+                <Text style={styles.cloudOptionSub}>Wort vorschlagen · Autocomplete</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cloudOption} onPress={() => setShowCloudMenu(false)}>
+              <View style={styles.cloudOptionIcon}>
+                <Text style={styles.cloudOptionEmoji}>📊</Text>
+              </View>
+              <View style={styles.cloudOptionText}>
+                <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_results')}</Text>
+                <Text style={styles.cloudOptionSub}>Markieren · Zusammenstellen · Teilen</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Wirksamkeit Overlay */}
       <WirksamkeitOverlay
         visible={showWirksamkeit}
@@ -768,35 +830,35 @@ export default function SwipeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: COLORS.white,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A0A0A',
+    backgroundColor: COLORS.white,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: COLORS.white,
   },
   emptyText: {
     fontSize: 18,
-    color: '#6B7280',
+    color: COLORS.gray500,
     textAlign: 'center',
     marginBottom: 24,
   },
   reloadButton: {
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.black,
     borderRadius: 30,
   },
   reloadButtonText: {
-    color: '#000000',
+    color: COLORS.white,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -870,17 +932,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
-  // Swipe card
+  // Swipe card – Light Mode
   card: {
     flex: 1,
     margin: 16,
     marginTop: 8,
-    backgroundColor: '#111827',
-    borderRadius: 28,
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: COLORS.gray100,
   },
   // Vote indicators
   voteIndicator: {
@@ -920,10 +987,9 @@ const styles = StyleSheet.create({
   // Word
   wordText: {
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: COLORS.black,
     textAlign: 'center',
     paddingHorizontal: 24,
-    letterSpacing: -0.5,
   },
   // Swipe hints
   swipeHints: {
@@ -951,19 +1017,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#374151',
   },
-  // AI Overlay
+  // AI Overlay – erscheint bei TAP auf die Karte
   aiOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(17, 24, 39, 0.97)',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    backgroundColor: 'rgba(26, 26, 46, 0.97)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     padding: 24,
-    maxHeight: '65%',
+    maxHeight: '60%',
     borderTopWidth: 1,
-    borderTopColor: '#374151',
+    borderTopColor: 'rgba(212, 175, 55, 0.3)',
   },
   aiHeader: {
     flexDirection: 'row',
@@ -1048,20 +1114,167 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
-  // Dummy (removed cloud menu)
-  cloudMenuOverlay: {},
-  cloudBackdrop: {},
-  cloudMenu: {},
-  cloudOption: {},
-  cloudOptionIcon: {},
-  cloudOptionText: {},
-  // Removed bottom bar
-  bottomBar: { display: 'none' },
-  streakContainer: {},
-  geoButton: {},
-  geoIcon: {},
-  settingsButton: {},
-  settingsIcon: {},
+  // Bottom sheet – Light Mode
+  bottomSheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 200,
+  },
+  bottomSheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  bottomSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+  },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  sheetOptionIcon: {
+    fontSize: 22,
+    marginRight: 16,
+  },
+  sheetOptionText: {
+    fontSize: 16,
+    color: COLORS.black,
+    fontWeight: '500',
+  },
+  sheetCancel: {
+    justifyContent: 'center',
+    borderBottomWidth: 0,
+    marginTop: 8,
+  },
+  sheetCancelText: {
+    fontSize: 16,
+    color: COLORS.gray500,
+    textAlign: 'center',
+  },
+  // Cloud Menu (Wolke)
+  cloudMenuOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 200,
+  },
+  cloudBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  cloudMenu: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 48,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+  },
+  cloudHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  cloudTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: COLORS.black,
+    letterSpacing: 1,
+  },
+  cloudClose: {
+    fontSize: 20,
+    color: COLORS.gray500,
+    fontWeight: '300',
+    padding: 4,
+  },
+  cloudOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  cloudOptionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  cloudOptionEmoji: {
+    fontSize: 24,
+  },
+  cloudOptionText: {
+    flex: 1,
+  },
+  cloudOptionLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginBottom: 2,
+  },
+  cloudOptionSub: {
+    fontSize: 13,
+    color: COLORS.gray500,
+  },
+  // Bottom Bar (Streak · Geo · Settings)
+  bottomBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+    backgroundColor: COLORS.white,
+  },
+  streakContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  streakIcon: {
+    fontSize: 22,
+  },
+  streakCount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  geoButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  geoIcon: {
+    fontSize: 22,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsIcon: {
+    fontSize: 20,
+    color: COLORS.black,
+  },
 });
   loadingContainer: {
     flex: 1,

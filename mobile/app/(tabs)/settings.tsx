@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: COLORS.black,
     marginBottom: 24,
   },
   section: {
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
     marginBottom: 16,
     flex: 1,
   },
@@ -594,10 +594,10 @@ const styles = StyleSheet.create({
   },
   expandIcon: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
   },
   membershipCard: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 16,
     padding: 20,
   },
@@ -632,11 +632,11 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   statLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginTop: 4,
   },
   upgradeButton: {
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
   },
   supporterSince: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginTop: 12,
     textAlign: 'center',
   },
@@ -662,14 +662,14 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     textAlign: 'center',
     padding: 20,
   },
   notificationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
   notificationWord: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
     marginBottom: 8,
   },
   progressBar: {
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
   },
   remainingText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
   },
   unsubscribeButton: {
     width: 40,
@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 16,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   languageOptions: {
     flexDirection: 'row',
@@ -742,7 +742,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
   },
   languageOptionSelected: {
     backgroundColor: COLORS.black,
@@ -750,7 +750,7 @@ const styles = StyleSheet.create({
   languageOptionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   languageOptionTextSelected: {
     color: COLORS.white,
@@ -765,14 +765,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
   },
   feedModeOptionSelected: {
     backgroundColor: COLORS.black,
   },
   feedModeText: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   feedModeTextSelected: {
     color: COLORS.white,
@@ -787,7 +787,7 @@ const styles = StyleSheet.create({
   },
   menuItemText: {
     fontSize: 16,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   menuArrow: {
     fontSize: 20,
@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   signOutButton: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
   signOutButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   deleteButton: {
     backgroundColor: COLORS.noLight,

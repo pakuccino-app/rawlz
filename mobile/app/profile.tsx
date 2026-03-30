@@ -349,34 +349,34 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
   backButtonText: {
     fontSize: 24,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   privacyNotice: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
   },
   privacyText: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     lineHeight: 20,
   },
   tierContainer: {
     marginBottom: 16,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -389,16 +389,16 @@ const styles = StyleSheet.create({
   tierTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
     marginBottom: 4,
   },
   tierProgress: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
   },
   tierArrow: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
   },
   tierContent: {
     padding: 20,
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   bonusPreview: {
     fontSize: 12,
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   optionButton: {
-    backgroundColor: '#111827',
+    backgroundColor: COLORS.white,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
   },
   optionButtonText: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   optionButtonTextSelected: {
     color: COLORS.white,
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   },
   sliderLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     width: 50,
     textAlign: 'center',
   },
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
   },
   skipButtonText: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     textDecorationLine: 'underline',
   },
   savingIndicator: {

@@ -1074,11 +1074,11 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     fontWeight: '500',
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: COLORS.black,
     fontWeight: '700',
   },
   listContent: {
@@ -1092,13 +1092,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     textAlign: 'center',
   },
 
   // History tab styles
   historyItem: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -1112,7 +1112,7 @@ const styles = StyleSheet.create({
   historyWord: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
     flex: 1,
   },
   voteBadge: {
@@ -1129,11 +1129,11 @@ const styles = StyleSheet.create({
   voteBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   changedText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginBottom: 8,
     fontStyle: 'italic',
   },
@@ -1159,7 +1159,7 @@ const styles = StyleSheet.create({
   },
   historyMeta: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
   },
   lockedBadge: {
     backgroundColor: COLORS.noLight,
@@ -1191,7 +1191,7 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     margin: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -1204,10 +1204,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     fontSize: 16,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   searchItem: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
@@ -1223,7 +1223,7 @@ const styles = StyleSheet.create({
   searchItemWord: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   archivedBadge: {
     backgroundColor: COLORS.gray300,
@@ -1233,7 +1233,7 @@ const styles = StyleSheet.create({
   },
   archivedText: {
     fontSize: 11,
-    color: '#D1D5DB',
+    color: COLORS.gray700,
   },
   progressContainer: {
     marginTop: 12,
@@ -1251,12 +1251,12 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginTop: 4,
   },
   searchItemMeta: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginTop: 8,
   },
   reactivateButton: {
@@ -1283,11 +1283,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginTop: 4,
   },
   clearButton: {
@@ -1305,7 +1305,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   questionChip: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -1316,22 +1316,22 @@ const styles = StyleSheet.create({
   },
   questionChipText: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
   questionChipTextSelected: {
     color: COLORS.white,
   },
   chartContainer: {
-    backgroundColor: '#111827',
+    backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: COLORS.gray100,
   },
   chartTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
     marginBottom: 16,
   },
   timeseriesChart: {
@@ -1350,18 +1350,18 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 14,
-    color: '#D1D5DB',
+    color: COLORS.gray700,
   },
   chartPlaceholder: {
     height: 150,
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 12,
   },
   chartPlaceholderText: {
-    color: '#9CA3AF',
+    color: COLORS.gray500,
   },
   resultsSection: {
     marginTop: 16,
@@ -1380,7 +1380,7 @@ const styles = StyleSheet.create({
   resultWord: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.black,
     width: 80,
   },
   resultBarContainer: {
@@ -1394,20 +1394,20 @@ const styles = StyleSheet.create({
   resultPct: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.black,
     width: 40,
     textAlign: 'right',
   },
   resultVotes: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     width: 50,
     textAlign: 'right',
   },
   thresholdGate: {
     flex: 1,
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     textAlign: 'center',
   },
   chartFooter: {
@@ -1435,10 +1435,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   actionButtonSecondary: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
   },
   actionButtonSecondaryText: {
-    color: '#FFFFFF',
+    color: COLORS.black,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1449,14 +1449,14 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.gray100,
   },
   savedItem: {
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     borderRadius: 12,
     padding: 16,
     marginTop: 12,
   },
   savedItemText: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
 
   // Compass tab styles
@@ -1467,17 +1467,17 @@ const styles = StyleSheet.create({
   lockedTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.black,
     marginBottom: 8,
   },
   lockedSubtitle: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginBottom: 24,
   },
   progressLabel: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginTop: 8,
   },
   kompassContainer: {
@@ -1485,17 +1485,17 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   kompassCard: {
-    backgroundColor: '#111827',
+    backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: COLORS.gray100,
     alignItems: 'center',
   },
   kompassTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
     marginBottom: 24,
   },
   kompassGrid: {
@@ -1535,7 +1535,7 @@ const styles = StyleSheet.create({
   },
   quadrantLabel: {
     fontSize: 10,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     textAlign: 'center',
   },
   userDot: {
@@ -1572,7 +1572,7 @@ const styles = StyleSheet.create({
   },
   kompassLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     fontWeight: '600',
   },
   labelTop: {
@@ -1591,7 +1591,7 @@ const styles = StyleSheet.create({
   },
   coordinates: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.gray500,
     marginTop: 24,
   },
   kompassFooter: {
