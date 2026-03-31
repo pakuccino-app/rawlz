@@ -263,8 +263,24 @@ export default function SwipeScreen() {
 
     const archivedIds = new Set((archivedQuestions || []).map(a => a.question_id));
 
+    // INV-12: Snoozed-Fragen aus AsyncStorage prüfen
+    // - snoozeUntil <= now → Frage zurück in Feed, Eintrag aus AsyncStorage löschen
+    // - snoozeUntil > now  → Frage weiterhin ausschließen
+    const snoozeRaw = await AsyncStorage.getItem('rawlz_snoozed');
+    const snoozeList: { questionId: string; snoozeUntil: number }[] = snoozeRaw
+      ? JSON.parse(snoozeRaw)
+      : [];
+    const now = Date.now();
+    const stillSnoozed = snoozeList.filter(e => e.snoozeUntil > now);
+    const snoozedIds = new Set(stillSnoozed.map(e => e.questionId));
+
+    // Abgelaufene Einträge löschen (Fragen kommen zurück in den Feed)
+    if (stillSnoozed.length !== snoozeList.length) {
+      await AsyncStorage.setItem('rawlz_snoozed', JSON.stringify(stillSnoozed));
+    }
+
     let filteredQuestions = (allQuestions || []).filter(
-      q => !votedIds.has(q.id) && !archivedIds.has(q.id)
+      q => !votedIds.has(q.id) && !archivedIds.has(q.id) && !snoozedIds.has(q.id)
     );
 
     // Add daily pulse at the beginning (INV-14)
