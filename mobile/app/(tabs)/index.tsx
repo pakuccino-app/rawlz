@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalSearchParams, router } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -604,6 +605,14 @@ export default function SwipeScreen() {
   }
 
   function handleShowLater() {
+    // Spec: NUR lokaler AsyncStorage-Timer, KEIN DB-Write, Karte nach 5 Min. wieder im Feed
+    if (!currentQuestion) return;
+    const snoozeUntil = Date.now() + 5 * 60 * 1000; // 5 Minuten
+    AsyncStorage.getItem('rawlz_snoozed').then(raw => {
+      const list = raw ? JSON.parse(raw) : [];
+      list.push({ questionId: currentQuestion.id, snoozeUntil });
+      AsyncStorage.setItem('rawlz_snoozed', JSON.stringify(list));
+    });
     setShowBottomSheet(false);
     advanceToNext();
   }
@@ -702,10 +711,10 @@ export default function SwipeScreen() {
             <>
               {/* Swipe-Hinweise */}
               <Animated.View style={[styles.voteIndicator, styles.yesIndicator, yesIndicatorStyle]}>
-                <Text style={styles.yesText}>JA</Text>
+                <Text style={styles.yesText}>👍</Text>
               </Animated.View>
               <Animated.View style={[styles.voteIndicator, styles.noIndicator, noIndicatorStyle]}>
-                <Text style={styles.noText}>NEIN</Text>
+                <Text style={styles.noText}>👎</Text>
               </Animated.View>
 
               {/* Frage-Wort */}
@@ -715,8 +724,8 @@ export default function SwipeScreen() {
 
               {/* Swipe-Anleitung */}
               <View style={styles.swipeHints}>
-                <Text style={styles.swipeHintUp}>↑ Archiv</Text>
-                <Text style={styles.swipeHintDown}>↓ KI-Info</Text>
+                <Text style={styles.swipeHintUp}>↑ Wolke</Text>
+                <Text style={styles.swipeHintDown}>↓ Optionen</Text>
               </View>
             </>
           )}
@@ -734,20 +743,11 @@ export default function SwipeScreen() {
               {aiContent.bullets?.map((bullet: string, i: number) => (
                 <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
               ))}
-              <Text style={styles.aiSource}>Quelle: KI-Analyse (GPT-4o-mini)</Text>
+              <Text style={styles.aiSource}>Quelle: KI-generiert · Kein politischer Standpunkt</Text>
             </View>
           )}
         </Animated.View>
       </GestureDetector>
-
-      {/* Streak-Anzeige oben rechts */}
-      <View style={styles.headerBar}>
-        <Text style={styles.appLogo}>#RAWLZ</Text>
-        <View style={styles.streakPill}>
-          <Text style={styles.streakIcon}>🔥</Text>
-          <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
-        </View>
-      </View>
 
       {/* Bottom Sheet */}
       {showBottomSheet && (
@@ -765,14 +765,9 @@ export default function SwipeScreen() {
               <Text style={styles.sheetOptionIcon}>🗑️</Text>
               <Text style={styles.sheetOptionText}>{t('swipe.archive')}</Text>
             </TouchableOpacity>
-            {/* Abuse report option */}
-            <TouchableOpacity style={styles.sheetOption} onPress={handleReportAbuse}>
-              <Text style={styles.sheetOptionIcon}>⚠️</Text>
-              <Text style={[styles.sheetOptionText, { color: COLORS.no }]}>Melden</Text>
-            </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.sheetOption, styles.sheetCancel]}
-              onPress={() => setShowBottomSheet(false)}
+              onPress={() => { setShowBottomSheet(false); }}
             >
               <Text style={styles.sheetCancelText}>{t('swipe.cancel')}</Text>
             </TouchableOpacity>
@@ -797,7 +792,10 @@ export default function SwipeScreen() {
             </View>
 
             {/* 3 große Tap-Targets */}
-            <TouchableOpacity style={styles.cloudOption} onPress={() => setShowCloudMenu(false)}>
+            <TouchableOpacity style={styles.cloudOption} onPress={() => {
+              setShowCloudMenu(false);
+              router.push('/(tabs)/search');
+            }}>
               <View style={styles.cloudOptionIcon}>
                 <Text style={styles.cloudOptionEmoji}>🔍</Text>
               </View>
@@ -807,7 +805,10 @@ export default function SwipeScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cloudOption} onPress={() => setShowCloudMenu(false)}>
+            <TouchableOpacity style={styles.cloudOption} onPress={() => {
+              setShowCloudMenu(false);
+              router.push('/suggest');
+            }}>
               <View style={styles.cloudOptionIcon}>
                 <Text style={styles.cloudOptionEmoji}>💡</Text>
               </View>
@@ -817,7 +818,10 @@ export default function SwipeScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cloudOption} onPress={() => setShowCloudMenu(false)}>
+            <TouchableOpacity style={styles.cloudOption} onPress={() => {
+              setShowCloudMenu(false);
+              router.push({ pathname: '/(tabs)/search', params: { questionId: currentQuestion?.id } });
+            }}>
               <View style={styles.cloudOptionIcon}>
                 <Text style={styles.cloudOptionEmoji}>📊</Text>
               </View>
