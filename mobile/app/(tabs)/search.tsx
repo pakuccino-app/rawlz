@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 
@@ -28,6 +28,7 @@ import { COLORS, RESULT_THRESHOLDS } from '../../lib/constants';
 import { supabase, getCurrentUser, getSession } from '../../lib/supabase';
 import hapticPatterns from '../../lib/haptics';
 import { calculateKompass, KompassResult } from '../../lib/kompass';
+import { BarChart } from 'react-native-gifted-charts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TABS = ['history', 'search', 'comparison', 'compass'] as const;
@@ -90,6 +91,7 @@ export default function SearchScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const chartRef = useRef<ViewShot>(null);
+  const params = useLocalSearchParams<{ questionId?: string }>();
 
   const [activeTab, setActiveTab] = useState<TabType>('history');
   const [user, setUser] = useState<User | null>(null);
@@ -120,6 +122,23 @@ export default function SearchScreen() {
   useEffect(() => {
     loadUser();
   }, []);
+
+  // Wenn questionId via Cloud Menu "Ergebnisse" übergeben wird:
+  // → Comparison Tab öffnen und Frage vorladen
+  useEffect(() => {
+    if (!params.questionId || !user) return;
+    setActiveTab('comparison');
+    supabase
+      .from('questions')
+      .select('id, word, yes_count, no_count, total_votes')
+      .eq('id', params.questionId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setSelectedQuestions([data]);
+        }
+      });
+  }, [params.questionId, user]);
 
   // Load tab-specific data when tab changes
   useEffect(() => {
@@ -823,8 +842,8 @@ export default function SearchScreen() {
             <View style={styles.chartContainer}>
               <Text style={styles.chartTitle}>{t('comparison.title')}</Text>
 
-              {/* Timeseries chart placeholder */}
-              {showTimeseries && (
+              {/* Timeseries / Balken-Chart */}
+              {showTimeseries && selectedQuestions.length >= 2 && (
                 <View style={styles.timeseriesChart}>
                   {selectedQuestions.map((q, idx) => (
                     <View key={q.id} style={styles.timeseriesLegend}>
@@ -832,10 +851,27 @@ export default function SearchScreen() {
                       <Text style={styles.legendText}>{q.word}</Text>
                     </View>
                   ))}
-                  {/* Chart would be rendered here with react-native-svg or similar */}
-                  <View style={styles.chartPlaceholder}>
-                    <Text style={styles.chartPlaceholderText}>Zeitreihen-Chart</Text>
-                  </View>
+                  <BarChart
+                    data={selectedQuestions.map((q, idx) => {
+                      const threshold = getResultThreshold();
+                      const canSee = q.total_votes >= threshold;
+                      const yesPct = canSee && q.total_votes > 0
+                        ? Math.round((q.yes_count * 100) / q.total_votes)
+                        : 0;
+                      return {
+                        value: yesPct,
+                        label: q.word.replace('#', '').slice(0, 10),
+                        frontColor: CHART_COLORS[idx] || '#16A34A',
+                      };
+                    })}
+                    barWidth={40}
+                    noOfSections={5}
+                    maxValue={100}
+                    isAnimated
+                    width={SCREEN_WIDTH - 64}
+                    height={180}
+                    barBorderRadius={4}
+                  />
                 </View>
               )}
 
