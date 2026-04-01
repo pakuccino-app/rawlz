@@ -13,6 +13,7 @@ import {
   Alert,
   ActivityIndicator,
   FlatList,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -53,6 +54,243 @@ interface NotificationSubscription {
 }
 
 type FeedMode = 'global' | 'country' | 'region' | 'mixed';
+
+// Spec: Vouch-UI — nur für membership_type='expert'
+function VouchSection({ userId }: { userId: string }) {
+  const { t } = useTranslation();
+  const [givenVouches, setGivenVouches] = useState<any[]>([]);
+  const [receivedVouches, setReceivedVouches] = useState<any[]>([]);
+  const [newVouchHash, setNewVouchHash] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { loadVouches(); }, []);
+
+  async function loadVouches() {
+    // Vouches die ich gegeben habe
+    const { data: given } = await supabase
+      .from('expert_vouches')
+      .select('id, vouched_user, status, created_at, users!vouched_user(device_hash)')
+      .eq('vouching_user', userId)
+      .eq('status', 'active');
+    setGivenVouches(given || []);
+
+    // Vouches die ich erhalten habe
+    const { data: received } = await supabase
+      .from('expert_vouches')
+      .select('id, vouching_user, status, created_at, users!vouching_user(device_hash)')
+      .eq('vouched_user', userId)
+      .eq('status', 'active');
+    setReceivedVouches(received || []);
+  }
+
+  async function handleAddVouch() {
+    if (!newVouchHash.trim()) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Spec: DB-Trigger verhindert > 5, nicht client-seitig
+      const { data: target } = await supabase
+        .from('users')
+        .select('id')
+        .eq('device_hash', newVouchHash.trim())
+        .single();
+
+      if (!target) throw new Error('User nicht gefunden.');
+
+      const { error: insertErr } = await supabase
+        .from('expert_vouches')
+        .insert({ vouching_user: userId, vouched_user: target.id });
+
+      if (insertErr) {
+        // Spec: DB-Trigger-Fehler abfangen (Limit 5)
+        if (insertErr.message?.includes('limit') || insertErr.code === 'P0001') {
+          setError('Du hast bereits 5 aktive Vouches. Ziehe einen zurück um einen neuen hinzuzufügen.');
+        } else {
+          throw insertErr;
+        }
+      } else {
+        setNewVouchHash('');
+        loadVouches();
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleWithdrawVouch(vouchId: string) {
+    // Spec: UPDATE expert_vouches SET status='withdrawn'
+    await supabase
+      .from('expert_vouches')
+      .update({ status: 'withdrawn', withdrawn_at: new Date().toISOString() })
+      .eq('id', vouchId);
+    loadVouches();
+  }
+
+  return (
+    <View style={vouchStyles.container}>
+      <Text style={vouchStyles.title}>Meine Vouches</Text>
+
+      {error && <Text style={vouchStyles.error}>{error}</Text>}
+
+      {/* Spec: Neue Vouch-Anfrage */}
+      <View style={vouchStyles.inputRow}>
+        <TextInput
+          style={vouchStyles.input}
+          value={newVouchHash}
+          onChangeText={setNewVouchHash}
+          placeholder="Device-Hash des Users"
+          placeholderTextColor={COLORS.gray500}
+          autoCapitalize="none"
+        />
+        <TouchableOpacity
+          style={[vouchStyles.addButton, isLoading && { opacity: 0.5 }]}
+          onPress={handleAddVouch}
+          disabled={isLoading}
+        >
+          <Text style={vouchStyles.addButtonText}>+</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={vouchStyles.hint}>{givenVouches.length}/5 aktive Vouches</Text>
+
+      {/* Spec: Aktuelle Vouches — device_hash first 8 chars + Datum */}
+      {givenVouches.length > 0 && (
+        <View style={vouchStyles.list}>
+          <Text style={vouchStyles.listTitle}>Vergeben</Text>
+          {givenVouches.map((v) => {
+            const hash = (v.users as any)?.device_hash || v.vouched_user;
+            return (
+              <View key={v.id} style={vouchStyles.vouchRow}>
+                <Text style={vouchStyles.vouchHash}>{hash.slice(0, 8)}…</Text>
+                <Text style={vouchStyles.vouchDate}>
+                  {new Date(v.created_at).toLocaleDateString('de-DE')}
+                </Text>
+                {/* Spec: Vouch zurückziehen */}
+                <TouchableOpacity onPress={() => handleWithdrawVouch(v.id)}>
+                  <Text style={vouchStyles.withdrawBtn}>Zurückziehen</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Spec: Eigene erhaltene Vouches */}
+      {receivedVouches.length > 0 && (
+        <View style={[vouchStyles.list, { marginTop: 8 }]}>
+          <Text style={vouchStyles.listTitle}>Erhalten</Text>
+          {receivedVouches.map((v) => {
+            const hash = (v.users as any)?.device_hash || v.vouching_user;
+            return (
+              <View key={v.id} style={vouchStyles.vouchRow}>
+                <Text style={vouchStyles.vouchHash}>{hash.slice(0, 8)}…</Text>
+                <Text style={vouchStyles.vouchDate}>
+                  {new Date(v.created_at).toLocaleDateString('de-DE')}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const vouchStyles = StyleSheet.create({
+  container: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginBottom: 12,
+  },
+  error: {
+    fontSize: 13,
+    color: '#DC2626',
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: COLORS.black,
+    backgroundColor: COLORS.gray100,
+    fontFamily: 'monospace',
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: COLORS.black,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 22,
+    color: COLORS.white,
+    fontWeight: '600',
+    marginTop: -2,
+  },
+  hint: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    marginBottom: 12,
+  },
+  list: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+    paddingTop: 10,
+  },
+  listTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.gray500,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  vouchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    gap: 8,
+  },
+  vouchHash: {
+    fontFamily: 'monospace',
+    fontSize: 13,
+    color: COLORS.black,
+    flex: 1,
+  },
+  vouchDate: {
+    fontSize: 12,
+    color: COLORS.gray500,
+  },
+  withdrawBtn: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+});
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -414,6 +652,11 @@ export default function SettingsScreen() {
             )}
           </View>
         </View>
+
+        {/* Spec: Vouch-UI — nur für Experten sichtbar */}
+        {user?.membership_type === 'expert' && (
+          <VouchSection userId={user.id} />
+        )}
 
         {/* Notifications section */}
         <View style={styles.section}>
