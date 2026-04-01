@@ -53,6 +53,7 @@ import AbuseReportSheet from '../../components/AbuseReportSheet';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
+const VERTICAL_SWIPE_THRESHOLD = 80; // Bug 2: fester Wert für DOWN/UP
 
 interface Question {
   id: string;
@@ -99,6 +100,8 @@ export default function SwipeScreen() {
   const [flashColor, setFlashColor] = useState<string | null>(null);
   const [showAIOverlay, setShowAIOverlay] = useState(false);
   const [aiContent, setAIContent] = useState<any>(null);
+  const [isAILoading, setIsAILoading] = useState(false); // Bug 3: Loading-State
+  const [aiError, setAIError] = useState<string | null>(null); // Bug 3: Fehler-State
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [showCloudMenu, setShowCloudMenu] = useState(false);
   
@@ -360,6 +363,7 @@ export default function SwipeScreen() {
           const threshold = RESULT_THRESHOLDS[user.membership_type as keyof typeof RESULT_THRESHOLDS] || 500;
           
           if (updated.total_votes >= threshold) {
+            // Vollständiges Ergebnis anzeigen
             const yesPct = Math.round((updated.yes_count * 100) / updated.total_votes);
             const noPct = 100 - yesPct;
             setResultData({
@@ -368,14 +372,27 @@ export default function SwipeScreen() {
               total: updated.total_votes,
             });
             setShowResult(true);
-
-            // Auto-advance after 3 seconds
             setTimeout(() => {
               setShowResult(false);
               setResultData(null);
               checkWirksamkeit();
               advanceToNext();
             }, 3000);
+            return;
+          } else {
+            // Bug 4: Threshold noch nicht erreicht → Hinweis anzeigen statt nichts
+            setResultData({
+              yes: -1, // Signalwert: Threshold nicht erreicht
+              no: -1,
+              total: updated.total_votes,
+            });
+            setShowResult(true);
+            setTimeout(() => {
+              setShowResult(false);
+              setResultData(null);
+              checkWirksamkeit();
+              advanceToNext();
+            }, 2500);
             return;
           }
         }
@@ -489,11 +506,11 @@ export default function SwipeScreen() {
           velocity: velocityX,
         });
         runOnJS(handleSwipeComplete)(direction);
-      } else if (translationY > SWIPE_THRESHOLD || velocityY > 500) {
+      } else if (translationY > VERTICAL_SWIPE_THRESHOLD || velocityY > 400) {
         // Swipe DOWN → Bottom Sheet
         translateY.value = withSpring(SCREEN_HEIGHT, { velocity: velocityY });
         runOnJS(handleSwipeComplete)('down');
-      } else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
+      } else if (translationY < -VERTICAL_SWIPE_THRESHOLD || velocityY < -400) {
         // Swipe UP → Cloud Menu (Wolke)
         translateY.value = withSpring(-SCREEN_HEIGHT, { velocity: velocityY });
         runOnJS(handleSwipeComplete)('up');
@@ -545,6 +562,8 @@ export default function SwipeScreen() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            // Bug 3: apikey-Header fehlt → Supabase blockiert Request
+            'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
             'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ questionId: currentQuestion.id }),
@@ -555,21 +574,26 @@ export default function SwipeScreen() {
 
       if (result.success && result.facts) {
         setAIContent(result.facts);
-        // Update local question cache
-        setQuestions(prev => prev.map(q => 
-          q.id === currentQuestion.id 
+        setQuestions(prev => prev.map(q =>
+          q.id === currentQuestion.id
             ? { ...q, ai_context_cache: result.facts }
             : q
         ));
       } else {
+        // Bug 3: Fehler-State anzeigen statt leerem Panel
         setAIContent({
-          sentence: t('ai.error'),
+          sentence: 'KI-Fakten konnten nicht geladen werden.',
           bullets: [],
           isLoading: false,
         });
       }
     } catch (error) {
       console.error('AI content error:', error);
+      setAIContent({
+        sentence: 'Verbindungsfehler. Bitte versuche es erneut.',
+        bullets: [],
+        isLoading: false,
+      });
       setAIContent({
         sentence: t('ai.error'),
         bullets: [],
@@ -708,13 +732,20 @@ export default function SwipeScreen() {
       {/* Result overlay */}
       {showResult && resultData && (
         <View style={styles.resultOverlay}>
-          <Text style={styles.resultText}>
-            {t('swipe.result', {
-              yes: resultData.yes,
-              no: resultData.no,
-              total: resultData.total.toLocaleString(),
-            })}
-          </Text>
+          {resultData.yes === -1 ? (
+            // Bug 4: Threshold nicht erreicht → Hinweis statt nichts
+            <Text style={styles.resultText}>
+              {`Ergebnis sichtbar ab ${RESULT_THRESHOLDS[user?.membership_type as keyof typeof RESULT_THRESHOLDS] || 500} Stimmen · Bisher: ${resultData.total.toLocaleString('de-DE')} Stimmen`}
+            </Text>
+          ) : (
+            <Text style={styles.resultText}>
+              {t('swipe.result', {
+                yes: resultData.yes,
+                no: resultData.no,
+                total: resultData.total.toLocaleString(),
+              })}
+            </Text>
+          )}
         </View>
       )}
 
@@ -747,7 +778,7 @@ export default function SwipeScreen() {
           )}
 
           {/* AI Overlay (Swipe Down = Deep Dive laut Konzept) */}
-          {showAIOverlay && aiContent && (
+          {showAIOverlay && (
             <View style={styles.aiOverlay}>
               <View style={styles.aiHeader}>
                 <Text style={styles.aiTitle}>KI-FAKTEN</Text>
@@ -755,11 +786,18 @@ export default function SwipeScreen() {
                   <Text style={styles.aiClose}>×</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.aiSentence}>{aiContent.sentence}</Text>
-              {aiContent.bullets?.map((bullet: string, i: number) => (
-                <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
-              ))}
-              <Text style={styles.aiSource}>Quelle: KI-generiert · Kein politischer Standpunkt</Text>
+              {/* Bug 3: Loading, Error, Content States */}
+              {!aiContent || aiContent.isLoading ? (
+                <ActivityIndicator color="#D4AF37" size="small" style={{ marginVertical: 16 }} />
+              ) : (
+                <>
+                  <Text style={styles.aiSentence}>{aiContent.sentence}</Text>
+                  {aiContent.bullets?.map((bullet: string, i: number) => (
+                    <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
+                  ))}
+                  <Text style={styles.aiSource}>Quelle: KI-generiert · Kein politischer Standpunkt</Text>
+                </>
+              )}
             </View>
           )}
         </Animated.View>
@@ -810,6 +848,7 @@ export default function SwipeScreen() {
             {/* 3 große Tap-Targets */}
             <TouchableOpacity style={styles.cloudOption} onPress={() => {
               setShowCloudMenu(false);
+              // Bug 1: einfacher Route-String, kein Object-Format
               router.push('/(tabs)/search');
             }}>
               <View style={styles.cloudOptionIcon}>
@@ -836,7 +875,13 @@ export default function SwipeScreen() {
 
             <TouchableOpacity style={styles.cloudOption} onPress={() => {
               setShowCloudMenu(false);
-              router.push({ pathname: '/(tabs)/search', params: { questionId: currentQuestion?.id } });
+              // Bug 1: null-Check + String-Format statt Object-Format
+              const qId = currentQuestion?.id;
+              if (qId) {
+                router.push(`/(tabs)/search?tab=results&questionId=${qId}`);
+              } else {
+                router.push('/(tabs)/search');
+              }
             }}>
               <View style={styles.cloudOptionIcon}>
                 <Text style={styles.cloudOptionEmoji}>📊</Text>
@@ -1160,7 +1205,8 @@ const styles = StyleSheet.create({
   bottomSheetOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    zIndex: 200,
+    zIndex: 300,       // Bug 2: über der Karte (elevation 5)
+    elevation: 10,
   },
   bottomSheetBackdrop: {
     ...StyleSheet.absoluteFillObject,
