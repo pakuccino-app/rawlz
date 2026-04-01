@@ -13,6 +13,7 @@ import { restoreLanguage } from '../lib/i18n';
 import { preloadSounds, initAudio } from '../lib/sounds';
 import { supabase, onAuthStateChange } from '../lib/supabase';
 import { COLORS } from '../lib/constants';
+import { initRevenueCat } from '../lib/revenuecat';
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
@@ -37,6 +38,9 @@ export default function RootLayout() {
           // Device-spezifisches Auto-Login (funktioniert in allen supabase-js Versionen)
           const { generateDeviceHash } = await import('../lib/hashing');
           const deviceHash = await generateDeviceHash();
+
+          // Spec: initRevenueCat(deviceHash) beim App-Start
+          await initRevenueCat(deviceHash);
           const anonEmail = `anon_${deviceHash.slice(0, 20)}@rawlz.internal`;
           const anonPassword = deviceHash.slice(0, 32);
 

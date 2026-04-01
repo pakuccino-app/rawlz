@@ -192,9 +192,9 @@ async function syncSupporterStatus(customerInfo: CustomerInfo): Promise<void> {
         // Record in history
         await supabase.from('trust_score_history').insert({
           user_id: user.id,
-          change_amount: 10,
+          delta: 10,
           reason: 'supporter_purchase',
-          new_score: updates.trust_score,
+          score_after: updates.trust_score,
         });
       }
 

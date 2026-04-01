@@ -23,6 +23,8 @@ import { COLORS } from '../../lib/constants';
 import { supabase, getCurrentUser, signOut } from '../../lib/supabase';
 import hapticPatterns from '../../lib/haptics';
 import { changeLanguage, getCurrentLanguage } from '../../lib/i18n';
+import { purchaseSupporter, restoreSupporter } from '../../lib/revenuecat';
+import { requestPasswordReset } from '../../lib/auth';
 
 interface User {
   id: string;
@@ -201,6 +203,66 @@ export default function SettingsScreen() {
     );
   }
 
+  // Fix 2+3: Supporter kaufen / wiederherstellen
+  async function handlePurchaseSupporter() {
+    const result = await purchaseSupporter();
+    if (result.success) {
+      Alert.alert('Danke! 🎉', 'Du bist jetzt RAWLZ Unterstützer!');
+      await loadUser();
+    } else if (result.shouldRestore) {
+      await handleRestoreSupporter();
+    } else if (result.error) {
+      Alert.alert('Fehler', result.error);
+    }
+  }
+
+  async function handleRestoreSupporter() {
+    const result = await restoreSupporter();
+    if (result.success) {
+      Alert.alert('Wiederhergestellt', 'Dein Kauf wurde wiederhergestellt.');
+      await loadUser();
+    } else if (result.error) {
+      Alert.alert('Fehler', result.error);
+    }
+  }
+
+  // Fix 5: Lobby Billing Portal
+  async function handleOpenBillingPortal() {
+    try {
+      const session = await supabase.auth.getSession();
+      if (!session.data.session) return;
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/create-billing-portal`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.data.session.access_token}`,
+          },
+        }
+      );
+      const data = await res.json();
+      if (data.url) {
+        const { Linking } = await import('react-native');
+        Linking.openURL(data.url);
+      }
+    } catch (e: any) {
+      Alert.alert('Fehler', 'Billing Portal konnte nicht geöffnet werden.');
+    }
+  }
+
+  // Fix 6: Passwort-Reset
+  async function handlePasswordReset() {
+    if (!user) return;
+    const authUser = await getCurrentUser();
+    if (!authUser?.email) {
+      Alert.alert('Info', 'Nur bei E-Mail-Accounts verfügbar.');
+      return;
+    }
+    await requestPasswordReset(authUser.email);
+    Alert.alert('Reset-Link gesendet', 'Bitte prüfe deine E-Mails.');
+  }
+
   async function handleSignOut() {
     Alert.alert(
       'Abmelden',
@@ -318,9 +380,27 @@ export default function SettingsScreen() {
             </View>
 
             {user?.membership_type === 'basis' && (
-              <TouchableOpacity style={styles.upgradeButton}>
+              <>
+                <TouchableOpacity style={styles.upgradeButton} onPress={handlePurchaseSupporter}>
+                  <Text style={styles.upgradeButtonText}>
+                    {t('membership.supporter_cta')} – {t('membership.supporter_price')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.upgradeButton, { marginTop: 8, backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.gray300 }]}
+                  onPress={handleRestoreSupporter}
+                >
+                  <Text style={[styles.upgradeButtonText, { color: COLORS.gray500 }]}>
+                    {t('membership.restore_purchases')}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {user?.membership_type === 'lobby' && (
+              <TouchableOpacity style={styles.upgradeButton} onPress={handleOpenBillingPortal}>
                 <Text style={styles.upgradeButtonText}>
-                  {t('membership.supporter_cta')} – {t('membership.supporter_price')}
+                  {t('membership.manage_billing')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -503,7 +583,7 @@ export default function SettingsScreen() {
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={handlePasswordReset}>
             <Text style={styles.menuItemText}>{t('settings.password_reset')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>

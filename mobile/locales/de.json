@@ -103,7 +103,9 @@
     "supporter_since": "Supporter seit {{date}}",
     "expert_vouches": "{{count}} Vouches",
     "expert_2fa": "2FA aktiviert",
-    "lobby_manage_billing": "Rechnungen verwalten"
+    "lobby_manage_billing": "Rechnungen verwalten",
+    "restore_purchases": "Käufe wiederherstellen",
+    "manage_billing": "Rechnungen verwalten"
   },
   "suggest": {
     "title": "Frage vorschlagen",

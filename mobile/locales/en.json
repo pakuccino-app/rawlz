@@ -103,7 +103,9 @@
     "supporter_since": "Supporter since {{date}}",
     "expert_vouches": "{{count}} Vouches",
     "expert_2fa": "2FA enabled",
-    "lobby_manage_billing": "Manage billing"
+    "lobby_manage_billing": "Manage billing",
+    "restore_purchases": "Restore Purchases",
+    "manage_billing": "Manage Billing"
   },
   "suggest": {
     "title": "Suggest a Question",
