@@ -190,6 +190,8 @@ export default function ProfileScreen() {
             />
             <Text style={styles.sliderLabel}>{field.labels[2]}</Text>
           </View>
+          {/* Pflicht-Hinweis pro Feld (Spec: bei jedem Feld sichtbar) */}
+          <Text style={styles.fieldPrivacyHint}>{t('profile.privacy_notice')}</Text>
           <TouchableOpacity
             style={styles.skipButton}
             onPress={() => saveField(field.key, null, 0)}
@@ -225,6 +227,9 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        {/* Pflicht-Hinweis pro Feld (Spec: bei jedem Feld sichtbar) */}
+        <Text style={styles.fieldPrivacyHint}>{t('profile.privacy_notice')}</Text>
+
         <TouchableOpacity
           style={styles.skipButton}
           onPress={() => saveField(field.key, null, 0)}
@@ -475,6 +480,13 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     width: 50,
     textAlign: 'center',
+  },
+  fieldPrivacyHint: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 8,
+    marginBottom: 4,
+    lineHeight: 16,
   },
   skipButton: {
     marginTop: 12,
