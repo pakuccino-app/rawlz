@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
     .eq('user_id', user.id)
     .single();
 
-  if (!lobbyAccount || !['active', 'trialing'].includes(lobbyAccount.subscription_status)) {
+  if (!lobbyAccount || !['active', 'trialing', 'subsidized_active'].includes(lobbyAccount.subscription_status)) {
     return json({ error: 'Aktives Lobby-Abo erforderlich' }, 403);
   }
 

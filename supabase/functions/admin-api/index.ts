@@ -386,6 +386,21 @@ Deno.serve(async (req: Request) => {
 
         const analytics: any = { dau, mau, totalVotes, totalQuestions };
 
+        // P1: totalUsers + membershipBreakdown
+        const { data: memberRows } = await supabase
+          .from('users')
+          .select('membership_type');
+        const breakdown = { basis: 0, supporter: 0, expert: 0, lobby: 0 };
+        let totalUsers = 0;
+        for (const row of (memberRows || [])) {
+          totalUsers++;
+          const t = row.membership_type as keyof typeof breakdown;
+          if (t in breakdown) breakdown[t]++;
+        }
+        analytics.totalUsers = totalUsers;
+        analytics.membershipBreakdown = breakdown;
+        analytics.activeQuestions = totalQuestions;
+
         // Revenue (super admin only)
         if (isSuperAdmin) {
           const { count: supporters } = await supabase
@@ -534,6 +549,178 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ logs }), {
           status: 200, headers: { 'Content-Type': 'application/json' },
         });
+      }
+
+      // ==================== P0: GET_ADMIN_INFO ====================
+      case 'get_admin_info': {
+        // P0: Dashboard-Refresh braucht role aus Memory oder EF
+        const { data: ipList } = await supabase
+          .from('admin_ip_whitelist')
+          .select('ip_address')
+          .limit(100);
+
+        const clientIpCheck = ipList && ipList.length > 0
+          ? ipList.some((e: any) => e.ip_address === clientIp)
+          : true; // kein Eintrag = kein IP-Lock
+
+        return new Response(JSON.stringify({
+          admin: { id: admin.id, email: admin.email, role: admin.role },
+          ipWhitelisted: clientIpCheck,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // ==================== P1: REJECT NOMINATION ====================
+      case 'reject_nomination': {
+        const { nominationId } = body.payload;
+        const { error: rejErr } = await supabase
+          .from('expert_nominations')
+          .update({ status: 'rejected' })
+          .eq('id', nominationId);
+        if (rejErr) throw rejErr;
+        await supabase.from('admin_audit_log').insert({
+          admin_id: admin.id, action: 'reject_nomination', entity_id: nominationId,
+        });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // ==================== P1: RESET ADMIN PASSWORD ====================
+      case 'reset_admin_password': {
+        if (admin.role !== 'super_admin') throw new Error('Nur Super-Admin');
+        const { adminId } = body.payload;
+        const { data: targetAdmin } = await supabase
+          .from('admin_users').select('email').eq('id', adminId).single();
+        if (!targetAdmin) throw new Error('Admin nicht gefunden');
+        // Generate temp password
+        const tempPassword = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6).toUpperCase() + '!';
+        const { error: pwErr } = await supabase.auth.admin.updateUserById(adminId, { password: tempPassword });
+        if (pwErr) throw pwErr;
+        await supabase.from('admin_audit_log').insert({
+          admin_id: admin.id, action: 'reset_admin_password', entity_id: adminId,
+        });
+        return new Response(JSON.stringify({ tempPassword }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // ==================== P1: TOGGLE ADMIN ====================
+      case 'toggle_admin': {
+        if (admin.role !== 'super_admin') throw new Error('Nur Super-Admin');
+        const { adminId, active } = body.payload;
+        const { error: toggleErr } = await supabase
+          .from('admin_users').update({ is_active: active }).eq('id', adminId);
+        if (toggleErr) throw toggleErr;
+        await supabase.from('admin_audit_log').insert({
+          admin_id: admin.id, action: active ? 'activate_admin' : 'deactivate_admin', entity_id: adminId,
+        });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // ==================== P1: GET USER VOUCHES ====================
+      case 'get_user_vouches': {
+        const { userId } = body.payload;
+        const { data: vouches, error: vErr } = await supabase
+          .from('expert_vouches')
+          .select('id, vouching_user, created_at, users!vouching_user(device_hash)')
+          .eq('vouched_user', userId)
+          .eq('status', 'active');
+        if (vErr) throw vErr;
+        return new Response(JSON.stringify({ vouches: (vouches || []).map((v: any) => ({
+          id: v.id,
+          voucher_device_hash: v.users?.device_hash || v.vouching_user,
+          created_at: v.created_at,
+        })) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // ==================== P1: ARCHIVE QUESTION ====================
+      case 'archive_question': {
+        const { questionId } = body.payload;
+        const { error: archErr } = await supabase
+          .from('questions').update({ status: 'archived' }).eq('id', questionId);
+        if (archErr) throw archErr;
+        await supabase.from('admin_audit_log').insert({
+          admin_id: admin.id, action: 'archive_question', entity_type: 'question', entity_id: questionId,
+        });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // ==================== P1: BAN_USER (if missing) ====================
+      case 'ban_user': {
+        const { userId, ban } = body.payload;
+        const { error: banErr } = await supabase
+          .from('users').update({ is_banned: ban }).eq('id', userId);
+        if (banErr) throw banErr;
+        await supabase.from('admin_audit_log').insert({
+          admin_id: admin.id, action: ban ? 'ban_user' : 'unban_user', entity_type: 'user', entity_id: userId,
+        });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // ==================== P1: APPROVE / REJECT COMMERCIAL KYC ====================
+      case 'approve_commercial_kyc': {
+        const { accountId } = body.payload;
+        const { error: kycErr } = await supabase
+          .from('lobby_accounts').update({ kyc_status: 'approved' }).eq('id', accountId);
+        if (kycErr) throw kycErr;
+        await supabase.from('admin_audit_log').insert({ admin_id: admin.id, action: 'approve_commercial_kyc', entity_id: accountId });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      case 'block_lobby_account': {
+        const { accountId } = body.payload;
+        const { error: blErr } = await supabase
+          .from('lobby_accounts').update({ subscription_status: 'cancelled' }).eq('id', accountId);
+        if (blErr) throw blErr;
+        await supabase.from('admin_audit_log').insert({ admin_id: admin.id, action: 'block_lobby_account', entity_id: accountId });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      case 'reject_subsidized_lobby': {
+        const { accountId } = body.payload;
+        await supabase.from('lobby_accounts').update({ kyc_status: 'rejected' }).eq('id', accountId);
+        // Ablehnungsmail via admin_audit_log event (pick up by CRON or webhook)
+        await supabase.from('admin_audit_log').insert({
+          admin_id: admin.id, action: 'reject_subsidized_lobby', entity_id: accountId,
+          details: { reason: 'Antrag abgelehnt durch Admin' },
+        });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      case 'activate_subsidized_lobby': {
+        const { accountId, validUntil } = body.payload;
+        const { error: actErr } = await supabase
+          .from('lobby_accounts')
+          .update({ kyc_status: 'approved', subscription_status: 'subsidized_active', valid_until: validUntil })
+          .eq('id', accountId);
+        if (actErr) throw actErr;
+        await supabase.from('admin_audit_log').insert({ admin_id: admin.id, action: 'activate_subsidized_lobby', entity_id: accountId });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      case 'create_subsidized_checkout': {
+        const { accountId, amount, validUntil } = body.payload;
+        // Call create-subsidized-checkout EF
+        const efRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/create-subsidized-checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+          body: JSON.stringify({ accountId, amount, validUntil }),
+        });
+        const efData = await efRes.json();
+        if (!efRes.ok) throw new Error(efData.error || 'Checkout-Fehler');
+        return new Response(JSON.stringify(efData), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      case 'approve_expert': {
+        const { nominationId } = body.payload;
+        // Already handled via send_expert_invitation
+        await supabase.from('admin_audit_log').insert({ admin_id: admin.id, action: 'approve_expert', entity_id: nominationId });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      case 'set_question_axes': {
+        const { questionId, axisX, axisY } = body.payload;
+        const { error: axErr } = await supabase
+          .from('questions').update({ axis_x: axisX, axis_y: axisY }).eq('id', questionId);
+        if (axErr) throw axErr;
+        await supabase.from('admin_audit_log').insert({ admin_id: admin.id, action: 'set_question_axes', entity_type: 'question', entity_id: questionId, details: { axisX, axisY } });
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
       default:
