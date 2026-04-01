@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminApi, adminLogout, getSessionToken } from '../lib/api';
+import { adminApi, adminLogout, getSessionToken, getAdminRole } from '../lib/api';
 import QuestionsTab from '../components/QuestionsTab';
 import ModerationTab from '../components/ModerationTab';
 import KYCTab from '../components/KYCTab';
@@ -44,11 +44,17 @@ export default function DashboardPage() {
 
   async function checkSession() {
     try {
-      const result = await adminApi('get_analytics', {});
-      // If we have revenue data, user is super_admin
-      if ('supporterRevenue' in (result.analytics || {})) {
-        setAdminRole('super_admin');
+      // Spec: Rolle aus gespeichertem Memory-State (gesetzt beim TOTP-Verify)
+      const storedRole = getAdminRole();
+      if (storedRole) {
+        setAdminRole(storedRole);
+        setIsLoading(false);
+        return;
       }
+
+      // Fallback: Rolle via admin-api verifizieren
+      const result = await adminApi('get_admin_info', {});
+      setAdminRole(result.role || 'moderator');
     } catch (err) {
       navigate('/login');
     } finally {

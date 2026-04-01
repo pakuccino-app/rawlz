@@ -59,14 +59,15 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const result = await adminTotpVerify(tempToken, totpCode);
+      // Spec: isSetupConfirmation:true beim Setup, false beim regulären Login
+      const isSetupConfirmation = step === 'totp-setup';
+      const result = await adminTotpVerify(tempToken, totpCode, isSetupConfirmation);
 
       if (result.error) {
         setError(result.error);
         return;
       }
 
-      // FIX 5: sessionToken kommt jetzt aus adminTotpVerify zurück
       if (result.success || result.sessionToken) {
         navigate('/dashboard');
       }

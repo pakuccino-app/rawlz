@@ -2,7 +2,7 @@
 
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-// Relative URL – Vercel proxied /functions/v1/* → Supabase (kein externer Domain-Call im Browser)
+// Vercel proxied /functions/v1/* → Supabase
 const FN_BASE = '/functions/v1';
 
 function baseHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -22,22 +22,25 @@ export interface AdminUser {
   has_2fa: boolean;
 }
 
+// Spec: Session Token NUR im Memory, NICHT localStorage
 let sessionToken: string | null = null;
+let adminRole: string | null = null;
 
 export function setSessionToken(token: string | null) {
   sessionToken = token;
-  if (token) {
-    localStorage.setItem('admin_session', token);
-  } else {
-    localStorage.removeItem('admin_session');
-  }
+  // NO localStorage – spec requires memory-only
 }
 
 export function getSessionToken(): string | null {
-  if (!sessionToken) {
-    sessionToken = localStorage.getItem('admin_session');
-  }
   return sessionToken;
+}
+
+export function setAdminRole(role: string | null) {
+  adminRole = role;
+}
+
+export function getAdminRole(): string | null {
+  return adminRole;
 }
 
 export async function adminLogin(email: string, password: string): Promise<{
@@ -56,7 +59,12 @@ export async function adminLogin(email: string, password: string): Promise<{
   return response.json();
 }
 
-export async function adminTotpVerify(tempToken: string, totpCode: string): Promise<{
+// Spec: isSetupConfirmation:true für Setup, false für regulären Login
+export async function adminTotpVerify(
+  tempToken: string,
+  totpCode: string,
+  isSetupConfirmation: boolean
+): Promise<{
   sessionToken?: string;
   success?: boolean;
   role?: string;
@@ -66,12 +74,15 @@ export async function adminTotpVerify(tempToken: string, totpCode: string): Prom
   const response = await fetch(`${FN_BASE}/admin-totp-verify`, {
     method: 'POST',
     headers: baseHeaders({ 'Authorization': `Bearer ${tempToken}` }),
-    body: JSON.stringify({ totpCode }),
+    body: JSON.stringify({ totpCode, isSetupConfirmation }),
   });
 
   const result = await response.json();
   if (result.sessionToken) {
     setSessionToken(result.sessionToken);
+  }
+  if (result.role) {
+    setAdminRole(result.role);
   }
   return result;
 }
@@ -99,14 +110,15 @@ export async function adminApi(action: string, payload?: any): Promise<any> {
     body: JSON.stringify({ action, payload }),
   });
 
-  const result = await response.json();
-
-  if (response.status === 401) {
+  // Spec: Auto-Logout bei 401 UND 403
+  if (response.status === 401 || response.status === 403) {
     setSessionToken(null);
+    setAdminRole(null);
     window.location.href = '/login';
     throw new Error('Session abgelaufen');
   }
 
+  const result = await response.json();
   if (result.error) throw new Error(result.error);
   return result;
 }
@@ -120,4 +132,5 @@ export async function adminLogout(): Promise<void> {
     }).catch(() => null);
   }
   setSessionToken(null);
+  setAdminRole(null);
 }
