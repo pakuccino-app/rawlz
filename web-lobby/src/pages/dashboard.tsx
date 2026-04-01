@@ -34,7 +34,8 @@ const MODULE_TITLES: Record<AnalyticsModule, string> = {
   comparison: 'Vergleich + Verified',
   suggestions: 'Vorschlags-Analyse',
   csv_export: 'Daten-Export',
-  pdf_report: 'Daten-Export',
+  pdf_report: 'PDF-Report',
+  settings: 'Einstellungen',
 };
 
 export default function DashboardPage() {
@@ -89,6 +90,7 @@ export default function DashboardPage() {
       case 'suggestions': return <VorschlagsAnalyse />;
       case 'csv_export':
       case 'pdf_report':  return <CsvExport />;
+      case 'settings':    return null; // navigates to /settings via router
       default:            return null;
     }
   }
@@ -102,7 +104,11 @@ export default function DashboardPage() {
         {/* Sidebar */}
         <Sidebar
           active={activeModule}
-          onSelect={m => { setActiveModule(m); setMobileMenuOpen(false); }}
+          onSelect={m => {
+            if (m === 'settings') { navigate('/settings'); return; }
+            setActiveModule(m);
+            setMobileMenuOpen(false);
+          }}
           onLogout={handleLogout}
           mobileOpen={mobileMenuOpen}
           onMobileClose={() => setMobileMenuOpen(false)}

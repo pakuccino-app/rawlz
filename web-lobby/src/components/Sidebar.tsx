@@ -21,7 +21,8 @@ export type AnalyticsModule =
   | 'comparison'
   | 'suggestions'
   | 'csv_export'
-  | 'pdf_report';
+  | 'pdf_report'
+  | 'settings';
 
 const NAV: { id: AnalyticsModule; label: string; icon: React.FC<any> }[] = [
   { id: 'gold_data', label: 'Gold-Daten', icon: BarChart3 },
@@ -37,6 +38,7 @@ const NAV: { id: AnalyticsModule; label: string; icon: React.FC<any> }[] = [
   { id: 'suggestions', label: 'Vorschlags-Analyse', icon: MessageSquare },
   { id: 'csv_export', label: 'CSV-Export', icon: Download },
   { id: 'pdf_report', label: 'PDF-Report', icon: FileText },
+  { id: 'settings',   label: 'Einstellungen', icon: FileText },
 ];
 
 interface SidebarProps {

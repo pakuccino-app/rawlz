@@ -1,13 +1,14 @@
 // web-lobby/src/lib/api.ts
 import { getAccessToken } from './supabase';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+// Vercel proxied /functions/v1/* → Supabase (verhindert Adblock-Probleme)
+const FN_BASE = '/functions/v1';
 
 async function lobbyFetch(path: string, body: object) {
   const token = await getAccessToken();
   if (!token) throw new Error('Nicht angemeldet');
 
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${path}`, {
+  const res = await fetch(`${FN_BASE}/${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -91,7 +92,7 @@ export async function downloadCsv(): Promise<Blob> {
   const token = await getAccessToken();
   if (!token) throw new Error('Nicht angemeldet');
 
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/lobby-analytics`, {
+  const res = await fetch(`/functions/v1/lobby-analytics`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

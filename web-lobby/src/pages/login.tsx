@@ -1,9 +1,15 @@
-// web-lobby/src/pages/login.tsx
-// Lobby Login mit Supabase Auth (E-Mail + Passwort)
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signIn, getSession } from '../lib/supabase';
+
+// Spec: Disclaimer immer sichtbar
+function Disclaimer() {
+  return (
+    <div className="w-full bg-[#1A1A2E] text-[#D4AF37] text-center text-xs font-medium py-3 px-4">
+      Kein Stimmvorteil – nur Analyse-Tools
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -34,7 +40,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-950">
+      <Disclaimer />
+      <div className="flex items-center justify-center p-4 min-h-[calc(100vh-40px)]">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-black text-white tracking-tight">#RAWLZ</h1>
@@ -96,6 +104,7 @@ export default function LoginPage() {
             </a>
           </p>
         </form>
+      </div>
       </div>
     </div>
   );

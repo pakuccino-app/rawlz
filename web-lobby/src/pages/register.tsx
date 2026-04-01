@@ -4,6 +4,32 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getAccessToken } from '../lib/supabase';
+
+// Vercel-Proxy für alle EF-Calls (kein Adblock-Problem)
+const FN_BASE = '/functions/v1';
+
+async function authFetch(path: string, body: object) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Nicht angemeldet. Bitte zuerst einloggen.');
+  const res = await fetch(`${FN_BASE}/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error ?? 'Fehler');
+  return data;
+}
+
+// Spec: Disclaimer-Komponente — immer sichtbar, gold auf midnight
+function Disclaimer() {
+  return (
+    <div className="w-full bg-[#1A1A2E] text-[#D4AF37] text-center text-xs font-medium py-3 px-4">
+      Kein Stimmvorteil – nur Analyse-Tools
+    </div>
+  );
+}
 
 // Types
 interface CommercialForm {
@@ -16,13 +42,14 @@ interface CommercialForm {
 }
 
 interface SubsidizedForm {
+  companyName: string; // Spec: company_name Pflichtfeld
   subsidyOrgType: string;
   tradeRegisterNo: string;
   companyWebsite: string;
   contactName: string;
   contactEmail: string;
   subsidyProofUrl: string;
-  subsidyReason: string;
+  subsidyReason: string;  // Spec: max 500 Zeichen
   suggestedAmount?: number;
 }
 
@@ -66,6 +93,7 @@ export default function RegisterPage() {
 
   // Subsidized form state
   const [subsidizedForm, setSubsidizedForm] = useState<SubsidizedForm>({
+    companyName: '',
     subsidyOrgType: '',
     tradeRegisterNo: '',
     companyWebsite: '',
@@ -76,46 +104,16 @@ export default function RegisterPage() {
     suggestedAmount: undefined,
   });
 
-  // Get auth token from localStorage
-  const getAuthToken = (): string | null => {
-    return localStorage.getItem('supabase_access_token');
-  };
-
   // Submit commercial registration
   async function handleCommercialSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-
-    const token = getAuthToken();
-    if (!token) {
-      setError('Nicht angemeldet. Bitte zuerst einloggen.');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-lobby`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            accountType: 'commercial',
-            ...commercialForm,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
+      const result = await authFetch('register-lobby', {
+        accountType: 'commercial',
+        ...commercialForm,
+      });
       setLobbyAccountId(result.lobbyAccountId);
       setPath('commercial-checkout');
     } catch (err: any) {
@@ -128,38 +126,18 @@ export default function RegisterPage() {
   // Submit subsidized registration
   async function handleSubsidizedSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    const token = getAuthToken();
-    if (!token) {
-      setError('Nicht angemeldet. Bitte zuerst einloggen.');
-      setIsLoading(false);
+    // Spec: max 500 Zeichen für subsidy_reason
+    if (subsidizedForm.subsidyReason.length > 500) {
+      setError('Begründung darf max. 500 Zeichen haben.');
       return;
     }
-
+    setIsLoading(true);
+    setError(null);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-lobby`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            accountType: 'subsidized',
-            ...subsidizedForm,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
+      await authFetch('register-lobby', {
+        accountType: 'subsidized',
+        ...subsidizedForm,
+      });
       setPath('subsidized-submitted');
     } catch (err: any) {
       setError(err.message || 'Antrag konnte nicht eingereicht werden.');
@@ -171,37 +149,10 @@ export default function RegisterPage() {
   // Start Stripe Checkout
   async function handleStartCheckout() {
     if (!lobbyAccountId) return;
-
     setIsLoading(true);
     setError(null);
-
-    const token = getAuthToken();
-    if (!token) {
-      setError('Nicht angemeldet.');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-lobby-checkout`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ lobbyAccountId }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      // Redirect to Stripe Checkout
+      const result = await authFetch('create-lobby-checkout', { lobbyAccountId });
       window.location.href = result.checkoutUrl;
     } catch (err: any) {
       setError(err.message || 'Checkout konnte nicht gestartet werden.');
@@ -212,7 +163,9 @@ export default function RegisterPage() {
   // Render path selection
   if (path === 'select') {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="min-h-screen bg-gray-50">
+        <Disclaimer />
+        <div className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-center mb-2">
             RAWLZ Lobby Zugang
@@ -302,13 +255,16 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
+    </div>
     );
   }
 
   // Render commercial form
   if (path === 'commercial') {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="min-h-screen bg-gray-50">
+        <Disclaimer />
+        <div className="py-12 px-4">
         <div className="max-w-xl mx-auto">
           <button
             onClick={() => setPath('select')}
@@ -420,6 +376,7 @@ export default function RegisterPage() {
             </button>
           </form>
         </div>
+        </div>
       </div>
     );
   }
@@ -466,7 +423,9 @@ export default function RegisterPage() {
   // Render subsidized form
   if (path === 'subsidized') {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="min-h-screen bg-gray-50">
+        <Disclaimer />
+        <div className="py-12 px-4">
         <div className="max-w-xl mx-auto">
           <button
             onClick={() => setPath('select')}
@@ -493,6 +452,20 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleSubsidizedSubmit} className="space-y-6">
+            {/* Spec: company_name Pflichtfeld für Path B */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Name der Organisation *
+              </label>
+              <input
+                type="text"
+                required
+                value={subsidizedForm.companyName}
+                onChange={(e) => setSubsidizedForm({ ...subsidizedForm, companyName: e.target.value })}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium mb-2">
                 Organisationstyp *
@@ -624,6 +597,7 @@ export default function RegisterPage() {
               {isLoading ? 'Wird eingereicht...' : 'Förderantrag einreichen'}
             </button>
           </form>
+        </div>
         </div>
       </div>
     );

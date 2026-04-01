@@ -6,6 +6,7 @@ import LoginPage from './pages/login';
 import RegisterPage from './pages/register';
 import SuccessPage from './pages/success';
 import DashboardPage from './pages/dashboard';
+import SettingsPage from './pages/settings';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/success" element={<SuccessPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
