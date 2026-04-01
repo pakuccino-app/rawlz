@@ -211,7 +211,7 @@ export default function SettingsScreen() {
           text: t('common.confirm'),
           onPress: async () => {
             await signOut();
-            router.replace('/auth/login');
+            router.replace('/auth');
           },
         },
       ]
@@ -229,12 +229,17 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Call delete account edge function
-              // For now, just sign out
+              const session = await supabase.auth.getSession();
+              if (session.data.session) {
+                // Supabase Auth: User löschen (löscht auch alle abhängigen Daten via CASCADE)
+                const { error } = await supabase.rpc('delete_user_account');
+                if (error) throw error;
+              }
               await signOut();
-              router.replace('/auth/login');
-            } catch (error) {
+              router.replace('/auth');
+            } catch (error: any) {
               console.error('Delete account error:', error);
+              Alert.alert('Fehler', error.message || t('settings.delete_error'));
             }
           },
         },
