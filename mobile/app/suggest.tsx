@@ -53,7 +53,7 @@ export default function SuggestScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [word, setWord] = useState('#');
   const [geoScope, setGeoScope] = useState<GeoScope>('global');
-  const [notifyOnActivate, setNotifyOnActivate] = useState(true);
+  const [notifyOnActivate, setNotifyOnActivate] = useState(false); // Spec: DEFAULT OFF
   
   const [autocompleteResults, setAutocompleteResults] = useState<AutocompleteResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -363,7 +363,7 @@ export default function SuggestScreen() {
                           <Text style={styles.dropdownStatusLive}>✅ Bereits live</Text>
                         ) : (
                           <Text style={styles.dropdownStatusPending}>
-                            ⏳ {item.submission_count}/{item.relevance_threshold} – Noch {item.relevance_threshold - item.submission_count} nötig
+                            ⏳ {item.submission_count}mal vorgeschlagen
                           </Text>
                         )}
                       </TouchableOpacity>
@@ -408,8 +408,8 @@ export default function SuggestScreen() {
               </View>
             </View>
 
-            {/* Notification toggle (only for pending/new) */}
-            {word.length > 1 && (
+            {/* Notification toggle: nur bei pending/neu (NICHT bei active) – Spec */}
+            {word.length > 1 && !autocompleteResults.some(r => r.status === 'active' && r.word === word) && (
               <TouchableOpacity
                 style={styles.notifyToggle}
                 onPress={() => setNotifyOnActivate(!notifyOnActivate)}
