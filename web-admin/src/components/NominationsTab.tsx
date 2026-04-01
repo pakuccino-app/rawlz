@@ -33,10 +33,21 @@ export default function NominationsTab() {
     }
   }
 
-  async function handleInvite(nominationId: string) {
+  // Spec: EF-16 send-expert-invitation
+  async function handleInvite(nominationId: string, email: string) {
     try {
-      // Would call send-expert-invitation
+      await adminApi('send_expert_invitation', { nominationId, email });
       alert('Einladung gesendet!');
+      loadNominations();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  async function handleReject(nominationId: string) {
+    if (!confirm('Nominierung ablehnen?')) return;
+    try {
+      await adminApi('reject_nomination', { nominationId });
       loadNominations();
     } catch (err: any) {
       alert(err.message);
@@ -56,8 +67,7 @@ export default function NominationsTab() {
               <th className="px-4 py-3 text-left text-xs text-gray-400 uppercase">Nominierungen</th>
               <th className="px-4 py-3 text-left text-xs text-gray-400 uppercase">Schwelle</th>
               <th className="px-4 py-3 text-left text-xs text-gray-400 uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs text-gray-400 uppercase">Aktion</th>
-            </tr>
+              <th className="px-4 py-3 text-left text-xs text-gray-400 uppercase">Aktion</th>            </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
             {isLoading ? (
@@ -92,12 +102,18 @@ export default function NominationsTab() {
                 </td>
                 <td className="px-4 py-3">
                   {nom.nomination_count >= THRESHOLD && nom.status === 'pending' && (
-                    <button
-                      onClick={() => handleInvite(nom.id)}
-                      className="text-amber-400 hover:text-amber-300"
-                    >
-                      📧 Einladen
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleInvite(nom.id, nom.email)}
+                        className="bg-amber-500 text-black px-3 py-1 rounded text-xs font-bold hover:bg-amber-400">
+                        📧 Einladen
+                      </button>
+                      <button
+                        onClick={() => handleReject(nom.id)}
+                        className="bg-gray-700 text-red-400 px-3 py-1 rounded text-xs hover:bg-gray-600">
+                        ❌ Ablehnen
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

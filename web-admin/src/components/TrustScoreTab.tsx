@@ -11,10 +11,17 @@ interface User {
   created_at: string;
 }
 
+interface Vouch {
+  id: string;
+  voucher_device_hash: string;
+  created_at: string;
+}
+
 export default function TrustScoreTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [vouches, setVouches] = useState<Vouch[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [newScore, setNewScore] = useState('');
   const [reason, setReason] = useState('');
@@ -32,8 +39,17 @@ export default function TrustScoreTab() {
     }
   }
 
+  function selectUser(user: User) {
+    setSelectedUser(user);
+    setNewScore(user.trust_score.toString());
+    // Spec: Aktuelle Vouches anzeigen
+    adminApi('get_user_vouches', { userId: user.id })
+      .then((r) => setVouches(r.vouches || []))
+      .catch(() => setVouches([]));
+  }
+
   async function handleUpdateScore() {
-    if (!selectedUser || !newScore) return;
+    if (!selectedUser) return;
     try {
       await adminApi('update_trust_score', {
         userId: selectedUser.id,
@@ -41,7 +57,7 @@ export default function TrustScoreTab() {
         reason,
       });
       alert('Trust Score aktualisiert');
-      setSelectedUser({ ...selectedUser, trust_score: parseInt(newScore) });
+      setSelectedUser((prev) => prev ? { ...prev, trust_score: parseInt(newScore) } : null);
     } catch (err: any) {
       alert(err.message);
     }
@@ -93,7 +109,7 @@ export default function TrustScoreTab() {
                 <div
                   key={user.id}
                   onClick={() => {
-                    setSelectedUser(user);
+                    selectUser(user);
                     setNewScore(user.trust_score.toString());
                   }}
                   className={`p-4 rounded-lg cursor-pointer transition ${
@@ -193,6 +209,24 @@ export default function TrustScoreTab() {
                     🗑️ Löschen
                   </button>
                 </div>
+              </div>
+
+              {/* Spec: Aktuelle Vouches anzeigen */}
+              <div className="border-t border-gray-700 pt-4 mt-4">
+                <h4 className="text-sm font-semibold text-gray-400 mb-2">
+                  Aktuelle Vouches ({vouches.length})
+                </h4>
+                {vouches.length === 0 ? (
+                  <p className="text-gray-600 text-xs">Keine Vouches vorhanden</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {vouches.map((v) => (
+                      <li key={v.id} className="text-xs text-gray-400 font-mono">
+                        {v.voucher_device_hash.slice(0, 16)}… · {new Date(v.created_at).toLocaleDateString('de-DE')}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           ) : (

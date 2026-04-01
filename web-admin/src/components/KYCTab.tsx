@@ -42,6 +42,64 @@ export default function KYCTab() {
     }
   }
 
+  // Spec: €0 → EF activate-subsidized-lobby | €>0 → EF create-subsidized-checkout
+  async function handleApproveSubsidy() {
+    if (!selectedAccount || !validUntil) {
+      alert('Bitte Gültigkeitsdatum setzen.');
+      return;
+    }
+    try {
+      const amount = parseFloat(approvalAmount);
+      if (amount === 0) {
+        await adminApi('activate_subsidized_lobby', {
+          accountId: selectedAccount.id,
+          validUntil,
+        });
+      } else {
+        await adminApi('create_subsidized_checkout', {
+          accountId: selectedAccount.id,
+          amount,
+          validUntil,
+        });
+      }
+      loadAccounts();
+      setSelectedAccount(null);
+    } catch (err: any) { alert(err.message); }
+  }
+
+  // Spec: Ablehnungsmail senden
+  async function handleRejectSubsidy() {
+    if (!selectedAccount) return;
+    if (!confirm('Antrag ablehnen und Ablehnungsmail senden?')) return;
+    try {
+      await adminApi('reject_subsidized_lobby', {
+        accountId: selectedAccount.id,
+        email: selectedAccount.contact_email,
+      });
+      loadAccounts();
+      setSelectedAccount(null);
+    } catch (err: any) { alert(err.message); }
+  }
+
+  async function handleApproveCommercial() {
+    if (!selectedAccount) return;
+    try {
+      await adminApi('approve_commercial_kyc', { accountId: selectedAccount.id });
+      loadAccounts();
+      setSelectedAccount(null);
+    } catch (err: any) { alert(err.message); }
+  }
+
+  async function handleBlockCommercial() {
+    if (!selectedAccount) return;
+    if (!confirm('Kommerziellen Zugang sperren?')) return;
+    try {
+      await adminApi('block_lobby_account', { accountId: selectedAccount.id });
+      loadAccounts();
+      setSelectedAccount(null);
+    } catch (err: any) { alert(err.message); }
+  }
+
   function daysUntilExpiry(date?: string) {
     if (!date) return null;
     const diff = new Date(date).getTime() - Date.now();
@@ -181,10 +239,12 @@ export default function KYCTab() {
                     />
                   </div>
                   <div className="flex gap-3">
-                    <button className="flex-1 bg-green-500 text-white py-2 rounded-lg">
+                    <button onClick={handleApproveSubsidy}
+                      className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-400">
                       ✅ Genehmigen
                     </button>
-                    <button className="flex-1 bg-red-500 text-white py-2 rounded-lg">
+                    <button onClick={handleRejectSubsidy}
+                      className="flex-1 bg-red-500 text-white py-2 rounded-lg hover:bg-red-400">
                       ❌ Ablehnen
                     </button>
                   </div>
@@ -194,10 +254,12 @@ export default function KYCTab() {
               {/* Actions for commercial */}
               {activeSubTab === 'commercial' && (
                 <div className="flex gap-3">
-                  <button className="flex-1 bg-green-500 text-white py-2 rounded-lg">
+                  <button onClick={handleApproveCommercial}
+                    className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-400">
                     ✅ KYC bestätigen
                   </button>
-                  <button className="flex-1 bg-red-500 text-white py-2 rounded-lg">
+                  <button onClick={handleBlockCommercial}
+                    className="flex-1 bg-red-500 text-white py-2 rounded-lg hover:bg-red-400">
                     🚫 Zugang sperren
                   </button>
                 </div>

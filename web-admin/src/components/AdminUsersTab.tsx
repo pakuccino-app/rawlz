@@ -50,6 +50,14 @@ export default function AdminUsersTab() {
     }
   }
 
+  async function handlePasswordReset(adminId: string, email: string) {
+    if (!confirm(`Passwort-Reset für ${email} senden?`)) return;
+    try {
+      const result = await adminApi('reset_admin_password', { adminId });
+      alert(`Neues temporäres Passwort: ${result.tempPassword}`);
+    } catch (err: any) { alert(err.message); }
+  }
+
   async function handleCreateAdmin() {
     if (!newEmail || !newName) return;
     try {
@@ -170,8 +178,21 @@ export default function AdminUsersTab() {
                       : '-'}
                   </td>
                   <td className="px-4 py-3">
-                    <button className="text-amber-400 hover:text-amber-300 mr-3">🔑</button>
-                    <button className="text-red-400 hover:text-red-300">🚫</button>
+                    {/* Spec: Passwort-Reset + Deaktivieren */}
+                    <button
+                      onClick={() => handlePasswordReset(admin.id, admin.email)}
+                      className="text-amber-400 hover:text-amber-300 mr-3"
+                      title="Passwort-Reset">🔑</button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`${admin.is_active ? 'Deaktivieren' : 'Aktivieren'}?`)) return;
+                        await adminApi('toggle_admin', { adminId: admin.id, active: !admin.is_active });
+                        loadData();
+                      }}
+                      className="text-red-400 hover:text-red-300"
+                      title={admin.is_active ? 'Deaktivieren' : 'Aktivieren'}>
+                      {admin.is_active ? '🚫' : '✅'}
+                    </button>
                   </td>
                 </tr>
               ))}
