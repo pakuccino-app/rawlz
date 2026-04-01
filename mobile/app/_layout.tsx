@@ -11,7 +11,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import '../lib/i18n';
 import { restoreLanguage } from '../lib/i18n';
 import { preloadSounds, initAudio } from '../lib/sounds';
-import { supabase, onAuthStateChange } from '../lib/supabase';
+import { supabase, onAuthStateChange, setupOAuthCallbackHandler } from '../lib/supabase';
 import { COLORS } from '../lib/constants';
 import { initRevenueCat } from '../lib/revenuecat';
 
@@ -83,8 +83,12 @@ export default function RootLayout() {
       setIsAuthenticated(!!session);
     });
 
+    // P2-1: Google OAuth URL-Handler registrieren (rawlz://auth/callback#access_token=...)
+    const oauthSub = setupOAuthCallbackHandler();
+
     return () => {
       subscription.unsubscribe();
+      oauthSub.remove();
     };
   }, []);
 
