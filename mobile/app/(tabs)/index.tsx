@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +29,7 @@ import Animated, {
 import {
   Gesture,
   GestureDetector,
+  GestureHandlerRootView,  // ← CRITICAL: fehlte komplett
 } from 'react-native-gesture-handler';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -664,25 +666,31 @@ export default function SwipeScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
-        </View>
-      </SafeAreaView>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.black} />
+          </View>
+        </SafeAreaView>
+      </GestureHandlerRootView>
     );
   }
 
   if (!currentQuestion) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.appLogo}>#RAWLZ</Text>
-          <Text style={[styles.emptyText, { marginTop: 24 }]}>{t('swipe.no_more_questions')}</Text>
-          <TouchableOpacity style={styles.reloadButton} onPress={loadData}>
-            <Text style={styles.reloadButtonText}>{t('errors.try_again')}</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
+          <View style={styles.emptyContainer}>
+            <Text style={styles.appLogo}>#RAWLZ</Text>
+            <Text style={[styles.emptyText, { marginTop: 24 }]}>{t('swipe.no_more_questions')}</Text>
+            <TouchableOpacity style={styles.reloadButton} onPress={loadData}>
+              <Text style={styles.reloadButtonText}>{t('errors.try_again')}</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </GestureHandlerRootView>
     );
   }
 
@@ -691,225 +699,222 @@ export default function SwipeScreen() {
   const isDailyPulse = currentQuestion.is_daily_pulse;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Streak-Anzeige oben rechts */}
-      <View style={styles.headerBar}>
-        <Text style={styles.appLogo}>#RAWLZ</Text>
-        <View style={styles.streakPill}>
-          <Text style={styles.streakIcon}>🔥</Text>
-          <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
-        </View>
-      </View>
+    // ← CRITICAL FIX: GestureHandlerRootView als äußerster Wrapper
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        {/* Spec: StatusBar nicht translucent */}
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
 
-      {/* Custom Bottom Bar: Streak · Geo-Filter · Settings */}
-      <View style={styles.bottomBar}>
-        <View style={styles.streakContainer}>
-          <Text style={styles.streakIcon}>🔥</Text>
-          <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
-        </View>
-        <TouchableOpacity style={styles.geoButton}>
-          <Text style={styles.geoIcon}>🌍</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingsButton} onPress={() => {}}>
-          <Text style={styles.settingsIcon}>⚙</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Offline indicator */}
-      {!isOnline && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineBannerText}>
-            📴 Offline – Stimmen werden gespeichert ({pendingCount} wartend)
-          </Text>
-        </View>
-      )}
-
-      {/* Flash overlay */}
-      {flashColor && (
-        <View style={[styles.flashOverlay, { backgroundColor: flashColor }]} />
-      )}
-
-      {/* Result overlay */}
-      {showResult && resultData && (
-        <View style={styles.resultOverlay}>
-          {resultData.yes === -1 ? (
-            // Bug 4: Threshold nicht erreicht → Hinweis statt nichts
-            <Text style={styles.resultText}>
-              {`Ergebnis sichtbar ab ${RESULT_THRESHOLDS[user?.membership_type as keyof typeof RESULT_THRESHOLDS] || 500} Stimmen · Bisher: ${resultData.total.toLocaleString('de-DE')} Stimmen`}
-            </Text>
-          ) : (
-            <Text style={styles.resultText}>
-              {t('swipe.result', {
-                yes: resultData.yes,
-                no: resultData.no,
-                total: resultData.total.toLocaleString(),
-              })}
-            </Text>
-          )}
-        </View>
-      )}
-
-      {/* Main card */}
-      <GestureDetector gesture={Gesture.Race(panGesture, tapGesture)}>
-        <Animated.View style={[styles.card, cardStyle]}>
-          {isDailyPulse ? (
-            <DailyPulseCard word={currentQuestion.word} style={StyleSheet.absoluteFill} />
-          ) : (
-            <>
-              {/* Swipe-Hinweise */}
-              <Animated.View style={[styles.voteIndicator, styles.yesIndicator, yesIndicatorStyle]}>
-                <Text style={styles.yesText}>👍</Text>
-              </Animated.View>
-              <Animated.View style={[styles.voteIndicator, styles.noIndicator, noIndicatorStyle]}>
-                <Text style={styles.noText}>👎</Text>
-              </Animated.View>
-
-              {/* Frage-Wort */}
-              <Text style={[styles.wordText, { fontSize }]}>
-                {currentQuestion.word}
-              </Text>
-
-              {/* Swipe-Anleitung */}
-              <View style={styles.swipeHints}>
-                <Text style={styles.swipeHintUp}>↑ Wolke</Text>
-                <Text style={styles.swipeHintDown}>↓ Optionen</Text>
-              </View>
-            </>
-          )}
-
-          {/* AI Overlay (Swipe Down = Deep Dive laut Konzept) */}
-          {showAIOverlay && (
-            <View style={styles.aiOverlay}>
-              <View style={styles.aiHeader}>
-                <Text style={styles.aiTitle}>KI-FAKTEN</Text>
-                <TouchableOpacity onPress={() => setShowAIOverlay(false)}>
-                  <Text style={styles.aiClose}>×</Text>
-                </TouchableOpacity>
-              </View>
-              {/* Bug 3: Loading, Error, Content States */}
-              {!aiContent || aiContent.isLoading ? (
-                <ActivityIndicator color="#D4AF37" size="small" style={{ marginVertical: 16 }} />
-              ) : (
-                <>
-                  <Text style={styles.aiSentence}>{aiContent.sentence}</Text>
-                  {aiContent.bullets?.map((bullet: string, i: number) => (
-                    <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
-                  ))}
-                  <Text style={styles.aiSource}>Quelle: KI-generiert · Kein politischer Standpunkt</Text>
-                </>
-              )}
-            </View>
-          )}
-        </Animated.View>
-      </GestureDetector>
-
-      {/* Bottom Sheet */}
-      {showBottomSheet && (
-        <View style={styles.bottomSheetOverlay}>
-          <TouchableOpacity 
-            style={styles.bottomSheetBackdrop}
-            onPress={() => setShowBottomSheet(false)}
-          />
-          <View style={styles.bottomSheet}>
-            <TouchableOpacity style={styles.sheetOption} onPress={handleShowLater}>
-              <Text style={styles.sheetOptionIcon}>⏰</Text>
-              <Text style={styles.sheetOptionText}>{t('swipe.later')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.sheetOption} onPress={handleArchive}>
-              <Text style={styles.sheetOptionIcon}>🗑️</Text>
-              <Text style={styles.sheetOptionText}>{t('swipe.archive')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.sheetOption, styles.sheetCancel]}
-              onPress={() => { setShowBottomSheet(false); }}
-            >
-              <Text style={styles.sheetCancelText}>{t('swipe.cancel')}</Text>
-            </TouchableOpacity>
+        {/* Header */}
+        <View style={styles.headerBar}>
+          <Text style={styles.appLogo}>#RAWLZ</Text>
+          <View style={styles.streakPill}>
+            <Text style={styles.streakIcon}>🔥</Text>
+            <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
           </View>
         </View>
-      )}
 
-      {/* Cloud Menu (Wolke) – Swipe UP: Suche · Vorschlagen · Ergebnisse */}
-      {showCloudMenu && (
-        <View style={styles.cloudMenuOverlay}>
-          <TouchableOpacity
-            style={styles.cloudBackdrop}
-            onPress={() => setShowCloudMenu(false)}
-          />
-          <View style={styles.cloudMenu}>
-            {/* Header */}
-            <View style={styles.cloudHeader}>
-              <Text style={styles.cloudTitle}>#RAWLZ</Text>
-              <TouchableOpacity onPress={() => setShowCloudMenu(false)}>
-                <Text style={styles.cloudClose}>✕</Text>
+        {/* Offline indicator */}
+        {!isOnline && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              📴 Offline – Stimmen werden gespeichert ({pendingCount} wartend)
+            </Text>
+          </View>
+        )}
+
+        {/* Flash overlay */}
+        {flashColor && (
+          <View style={[styles.flashOverlay, { backgroundColor: flashColor }]} />
+        )}
+
+        {/* Result overlay */}
+        {showResult && resultData && (
+          <View style={styles.resultOverlay}>
+            {resultData.yes === -1 ? (
+              <Text style={styles.resultText}>
+                {`Ergebnis sichtbar ab ${RESULT_THRESHOLDS[user?.membership_type as keyof typeof RESULT_THRESHOLDS] || 500} Stimmen · Bisher: ${resultData.total.toLocaleString('de-DE')} Stimmen`}
+              </Text>
+            ) : (
+              <Text style={styles.resultText}>
+                {t('swipe.result', {
+                  yes: resultData.yes,
+                  no: resultData.no,
+                  total: resultData.total.toLocaleString(),
+                })}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Main card — GestureDetector direkt auf Animated.View */}
+        <GestureDetector gesture={Gesture.Race(panGesture, tapGesture)}>
+          <Animated.View style={[styles.card, cardStyle]}>
+            {isDailyPulse ? (
+              <DailyPulseCard word={currentQuestion.word} style={StyleSheet.absoluteFill} />
+            ) : (
+              <>
+                {/* Swipe-Hinweise */}
+                <Animated.View style={[styles.voteIndicator, styles.yesIndicator, yesIndicatorStyle]}>
+                  <Text style={styles.yesText}>👍</Text>
+                </Animated.View>
+                <Animated.View style={[styles.voteIndicator, styles.noIndicator, noIndicatorStyle]}>
+                  <Text style={styles.noText}>👎</Text>
+                </Animated.View>
+
+                {/* Frage-Wort */}
+                <Text style={[styles.wordText, { fontSize }]}>
+                  {currentQuestion.word}
+                </Text>
+
+                {/* Swipe-Anleitung */}
+                <View style={styles.swipeHints}>
+                  <Text style={styles.swipeHintUp}>↑ Wolke</Text>
+                  <Text style={styles.swipeHintDown}>↓ Optionen</Text>
+                </View>
+              </>
+            )}
+
+            {/* AI Overlay */}
+            {showAIOverlay && (
+              <View style={styles.aiOverlay}>
+                <View style={styles.aiHeader}>
+                  <Text style={styles.aiTitle}>KI-FAKTEN</Text>
+                  <TouchableOpacity onPress={() => setShowAIOverlay(false)}>
+                    <Text style={styles.aiClose}>×</Text>
+                  </TouchableOpacity>
+                </View>
+                {!aiContent || aiContent.isLoading ? (
+                  <ActivityIndicator color="#D4AF37" size="small" style={{ marginVertical: 16 }} />
+                ) : (
+                  <>
+                    <Text style={styles.aiSentence}>{aiContent.sentence}</Text>
+                    {aiContent.bullets?.map((bullet: string, i: number) => (
+                      <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
+                    ))}
+                    <Text style={styles.aiSource}>Quelle: KI-generiert · Kein politischer Standpunkt</Text>
+                  </>
+                )}
+              </View>
+            )}
+          </Animated.View>
+        </GestureDetector>
+
+        {/* Bottom Bar — NACH der Karte (flex-end) */}
+        <View style={styles.bottomBar}>
+          <View style={styles.streakContainer}>
+            <Text style={styles.streakIcon}>🔥</Text>
+            <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
+          </View>
+          <TouchableOpacity style={styles.geoButton}>
+            <Text style={styles.geoIcon}>🌍</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/(tabs)/settings')}>
+            <Text style={styles.settingsIcon}>⚙</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Bottom Sheet */}
+        {showBottomSheet && (
+          <View style={styles.bottomSheetOverlay}>
+            <TouchableOpacity
+              style={styles.bottomSheetBackdrop}
+              onPress={() => setShowBottomSheet(false)}
+            />
+            <View style={styles.bottomSheet}>
+              <TouchableOpacity style={styles.sheetOption} onPress={handleShowLater}>
+                <Text style={styles.sheetOptionIcon}>⏰</Text>
+                <Text style={styles.sheetOptionText}>{t('swipe.later')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sheetOption} onPress={handleArchive}>
+                <Text style={styles.sheetOptionIcon}>🗑️</Text>
+                <Text style={styles.sheetOptionText}>{t('swipe.archive')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sheetOption, styles.sheetCancel]}
+                onPress={() => { setShowBottomSheet(false); }}
+              >
+                <Text style={styles.sheetCancelText}>{t('swipe.cancel')}</Text>
               </TouchableOpacity>
             </View>
-
-            {/* 3 große Tap-Targets */}
-            <TouchableOpacity style={styles.cloudOption} onPress={() => {
-              setShowCloudMenu(false);
-              // Bug 1: einfacher Route-String, kein Object-Format
-              router.push('/(tabs)/search');
-            }}>
-              <View style={styles.cloudOptionIcon}>
-                <Text style={styles.cloudOptionEmoji}>🔍</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_search')}</Text>
-                <Text style={styles.cloudOptionSub}>Abstimmungen finden & vergleichen</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cloudOption} onPress={() => {
-              setShowCloudMenu(false);
-              router.push('/suggest');
-            }}>
-              <View style={styles.cloudOptionIcon}>
-                <Text style={styles.cloudOptionEmoji}>💡</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_suggest')}</Text>
-                <Text style={styles.cloudOptionSub}>Wort vorschlagen · Autocomplete</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cloudOption} onPress={() => {
-              setShowCloudMenu(false);
-              // Bug 1: null-Check + String-Format statt Object-Format
-              const qId = currentQuestion?.id;
-              if (qId) {
-                router.push(`/(tabs)/search?tab=results&questionId=${qId}`);
-              } else {
-                router.push('/(tabs)/search');
-              }
-            }}>
-              <View style={styles.cloudOptionIcon}>
-                <Text style={styles.cloudOptionEmoji}>📊</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_results')}</Text>
-                <Text style={styles.cloudOptionSub}>Markieren · Zusammenstellen · Teilen</Text>
-              </View>
-            </TouchableOpacity>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* Wirksamkeit Overlay */}
-      <WirksamkeitOverlay
-        visible={showWirksamkeit}
-        onDismiss={() => setShowWirksamkeit(false)}
-        data={wirksamkeitData}
-      />
+        {/* Cloud Menu (Wolke) */}
+        {showCloudMenu && (
+          <View style={styles.cloudMenuOverlay}>
+            <TouchableOpacity
+              style={styles.cloudBackdrop}
+              onPress={() => setShowCloudMenu(false)}
+            />
+            <View style={styles.cloudMenu}>
+              <View style={styles.cloudHeader}>
+                <Text style={styles.cloudTitle}>#RAWLZ</Text>
+                <TouchableOpacity onPress={() => setShowCloudMenu(false)}>
+                  <Text style={styles.cloudClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={styles.cloudOption} onPress={() => {
+                setShowCloudMenu(false);
+                router.push('/(tabs)/search');
+              }}>
+                <View style={styles.cloudOptionIcon}>
+                  <Text style={styles.cloudOptionEmoji}>🔍</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_search')}</Text>
+                  <Text style={styles.cloudOptionSub}>Abstimmungen finden & vergleichen</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cloudOption} onPress={() => {
+                setShowCloudMenu(false);
+                router.push('/suggest');
+              }}>
+                <View style={styles.cloudOptionIcon}>
+                  <Text style={styles.cloudOptionEmoji}>💡</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_suggest')}</Text>
+                  <Text style={styles.cloudOptionSub}>Wort vorschlagen · Autocomplete</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cloudOption} onPress={() => {
+                setShowCloudMenu(false);
+                const qId = currentQuestion?.id;
+                if (qId) {
+                  router.push(`/(tabs)/search?tab=results&questionId=${qId}`);
+                } else {
+                  router.push('/(tabs)/search');
+                }
+              }}>
+                <View style={styles.cloudOptionIcon}>
+                  <Text style={styles.cloudOptionEmoji}>📊</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_results')}</Text>
+                  <Text style={styles.cloudOptionSub}>Markieren · Zusammenstellen · Teilen</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
-      {/* Abuse Report Sheet */}
-      <AbuseReportSheet
-        visible={showAbuseReport}
-        onClose={() => setShowAbuseReport(false)}
-        questionId={currentQuestion.id}
-        questionWord={currentQuestion.word}
-      />
-    </SafeAreaView>
+        {/* Wirksamkeit Overlay */}
+        <WirksamkeitOverlay
+          visible={showWirksamkeit}
+          onDismiss={() => setShowWirksamkeit(false)}
+          data={wirksamkeitData}
+        />
+
+        {/* Abuse Report Sheet */}
+        <AbuseReportSheet
+          visible={showAbuseReport}
+          onClose={() => setShowAbuseReport(false)}
+          questionId={currentQuestion.id}
+          questionWord={currentQuestion.word}
+        />
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -929,13 +934,13 @@ const styles = StyleSheet.create({
   appLogo: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: COLORS.black,  // Light Mode: schwarz
     letterSpacing: 1,
   },
   streakPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937',
+    backgroundColor: COLORS.gray100,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
