@@ -29,6 +29,27 @@ import {
 } from '../../lib/auth';
 import hapticPatterns from '../../lib/haptics';
 
+// Supabase Auth-Fehlercodes → deutsche UI-Texte (Spec)
+function getAuthErrorMessage(error: any): string {
+  const msg = error?.message?.toLowerCase() ?? '';
+  const code = error?.code ?? '';
+  if (msg.includes('invalid login') || msg.includes('invalid credentials') || code === 'invalid_credentials')
+    return 'E-Mail oder Passwort falsch.';
+  if (msg.includes('email not confirmed') || code === 'email_not_confirmed')
+    return 'Bitte bestätige zuerst deine E-Mail-Adresse.';
+  if (msg.includes('user already registered') || msg.includes('email already') || code === 'email_exists')
+    return 'Diese E-Mail ist bereits registriert. Bitte melde dich an.';
+  if (msg.includes('weak password') || code === 'weak_password')
+    return 'Passwort zu unsicher. Bitte mindestens 8 Zeichen verwenden.';
+  if (msg.includes('rate limit') || code === 'over_request_rate_limit')
+    return 'Zu viele Versuche. Bitte warte einen Moment.';
+  if (msg.includes('network') || msg.includes('fetch'))
+    return 'Keine Verbindung. Bitte prüfe deine Internetverbindung.';
+  if (msg.includes('user not found') || code === 'user_not_found')
+    return 'Kein Konto mit dieser E-Mail gefunden.';
+  return 'Anmeldung fehlgeschlagen. Bitte versuche es erneut.';
+}
+
 type AuthMode = 'signin' | 'signup' | 'reset';
 
 export default function AuthScreen() {
@@ -65,7 +86,7 @@ export default function AuthScreen() {
         Alert.alert(t('errors.auth_failed'));
       }
     } catch (error: any) {
-      Alert.alert(t('errors.auth_failed'), error.message);
+      Alert.alert('Fehler', getAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +106,7 @@ export default function AuthScreen() {
         Alert.alert(t('errors.auth_failed'));
       }
     } catch (error: any) {
-      Alert.alert(t('errors.auth_failed'), error.message);
+      Alert.alert('Fehler', getAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +150,7 @@ export default function AuthScreen() {
         setMode('signin');
       }
     } catch (error: any) {
-      Alert.alert(t('errors.auth_failed'), error.message);
+      Alert.alert('Fehler', getAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -150,6 +171,17 @@ export default function AuthScreen() {
             <Text style={styles.logo}>#</Text>
             <Text style={styles.appName}>RAWLZ</Text>
             <Text style={styles.tagline}>{t('app.tagline')}</Text>
+          </View>
+
+          {/* GDPR Consent — VOR den Auth-Buttons (Spec: "vor erstem Login") */}
+          <View style={styles.gdprContainer}>
+            <Checkbox
+              value={gdprConsent}
+              onValueChange={setGdprConsent}
+              color={gdprConsent ? COLORS.black : undefined}
+              style={styles.checkbox}
+            />
+            <Text style={styles.gdprText}>{t('auth.gdpr_consent')}</Text>
           </View>
 
           {/* Auth Buttons */}
@@ -278,16 +310,6 @@ export default function AuthScreen() {
             )}
           </View>
 
-          {/* GDPR Consent */}
-          <View style={styles.gdprContainer}>
-            <Checkbox
-              value={gdprConsent}
-              onValueChange={setGdprConsent}
-              color={gdprConsent ? COLORS.black : undefined}
-              style={styles.checkbox}
-            />
-            <Text style={styles.gdprText}>{t('auth.gdpr_consent')}</Text>
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
