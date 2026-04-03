@@ -12,10 +12,10 @@ import en from '../locales/en.json';
 
 const LANGUAGE_KEY = 'rawlz_language';
 
-// Determine initial language from device locale
+// RAWLZ ist deutsch-first. Standard ist immer Deutsch.
+// Englisch wird nur über AsyncStorage-Präferenz gewählt.
 const getInitialLanguage = (): 'de' | 'en' => {
-  const locale = Localization.locale;
-  return locale.startsWith('de') ? 'de' : 'en';
+  return 'de'; // Standardmäßig Deutsch, nicht Gerätesprache
 };
 
 // Initialize i18n

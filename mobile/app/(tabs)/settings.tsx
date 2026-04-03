@@ -499,12 +499,8 @@ export default function SettingsScreen() {
     if (result.success) {
       Alert.alert('Danke! 🎉', 'Du bist jetzt RAWLZ Unterstützer!');
       await loadUser();
-    } else if (result.shouldRestore) {
-      await handleRestoreSupporter();
-    } else {
-      // Product unavailable or purchase cancelled — no error popup per spec
-      console.log('Supporter purchase unavailable:', result.error);
     }
+    // shouldRestore, Fehler und nicht-verfügbar → kein Alert (Preview-Build)
   }
 
   async function handleRestoreSupporter() {
@@ -512,9 +508,8 @@ export default function SettingsScreen() {
     if (result.success) {
       Alert.alert('Wiederhergestellt', 'Dein Kauf wurde wiederhergestellt.');
       await loadUser();
-    } else if (result.error) {
-      Alert.alert('Fehler', result.error);
     }
+    // Kein Fehler-Alert bei fehlgeschlagener Wiederherstellung
   }
 
   // Fix 5: Lobby Billing Portal
@@ -877,9 +872,9 @@ export default function SettingsScreen() {
 
           <TouchableOpacity style={styles.menuItem}
             onPress={() => Alert.alert(
-              t('settings.privacy_policy'),
-              'Die Datenschutzerklärung ist unter rawlz.app/datenschutz verfügbar. Kontakt: datenschutz@rawlz.app',
-              [{ text: 'OK' }, { text: 'E-Mail', onPress: () => Linking.openURL('mailto:datenschutz@rawlz.app') }]
+              'Datenschutzerklärung',
+              'RAWLZ verarbeitet nur anonymisierte Abstimmungsdaten. Keine Weitergabe an Dritte. Alle Daten auf EU-Servern (Supabase).\n\nKontakt: datenschutz@rawlz.app\nArt. 17 DSGVO: Löschung jederzeit über „Konto löschen" in den Einstellungen.',
+              [{ text: 'Schließen' }, { text: 'E-Mail', onPress: () => Linking.openURL('mailto:datenschutz@rawlz.app') }]
             )}>
             <Text style={styles.menuItemText}>{t('settings.privacy_policy')}</Text>
             <Text style={styles.menuArrow}>›</Text>
@@ -887,16 +882,20 @@ export default function SettingsScreen() {
 
           <TouchableOpacity style={styles.menuItem}
             onPress={() => Alert.alert(
-              t('settings.terms'),
-              'Die Nutzungsbedingungen sind unter rawlz.app/nutzungsbedingungen verfügbar.',
-              [{ text: 'OK' }]
+              'Nutzungsbedingungen',
+              'RAWLZ ist eine anonyme Meinungsabgabe-App. Die Nutzung ist kostenlos. Keine Haftung für die Richtigkeit der KI-generierten Fakten. Keine Garantie auf Verfügbarkeit.\n\nKontakt: kontakt@rawlz.app',
+              [{ text: 'Schließen' }]
             )}>
             <Text style={styles.menuItemText}>{t('settings.terms')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}
-            onPress={() => Linking.openURL('mailto:kontakt@rawlz.app?subject=Impressum')}>
+            onPress={() => Alert.alert(
+              'Impressum',
+              'RAWLZ\nKontakt: kontakt@rawlz.app\n\nVerantwortlich im Sinne des § 5 TMG:\nAngaben folgen bei Marktstart.',
+              [{ text: 'Schließen' }, { text: 'E-Mail', onPress: () => Linking.openURL('mailto:kontakt@rawlz.app?subject=Impressum') }]
+            )}>
             <Text style={styles.menuItemText}>{t('settings.imprint')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>

@@ -27,9 +27,10 @@ let soundsEnabled = true;
  */
 export async function initAudio() {
   await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: false,
+    playsInSilentModeIOS: true,        // iOS: auch im Stumm-Modus abspielen
     staysActiveInBackground: false,
     shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false,  // Android: über Lautsprecher, nicht Hörmuschel
   });
 }
 

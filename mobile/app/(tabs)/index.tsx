@@ -650,28 +650,26 @@ export default function SwipeScreen() {
     }
   }
 
-  // Fix 1+2: result erscheint erst NACH dem Kartenabgang (300ms Verzögerung).
-  // pendingResultRef speichert die Daten während die Karte noch animiert.
   function advanceToNext() {
     setTimeout(() => {
-      // Karte ist jetzt off-screen — Position sofort zurücksetzen
-      translateX.value = 0;
-      translateY.value = 0;
-      rotation.value = 0;
-      scale.value = 1;
-
+      // Hier ist die Karte bereits off-screen (Spring fertig nach ~200ms).
+      // translateX.value NICHT zurücksetzen, solange Result sichtbar ist.
       const pending = pendingResultRef.current;
       pendingResultRef.current = null;
 
       if (pending) {
-        // Ergebnis JETZT zeigen (Karte weg, saubere Anzeige)
+        // Ergebnis zeigen — Karte bleibt off-screen (translateX = SCREEN_WIDTH)
         setResultData(pending);
         setShowResult(true);
         const displayDuration = pending.yes === -1 ? 2500 : 3000;
         setTimeout(() => {
           setShowResult(false);
           setResultData(null);
-          // Nächste Karte laden
+          // Erst JETZT Karte zurücksetzen und neue Frage laden
+          translateX.value = 0;
+          translateY.value = 0;
+          rotation.value = 0;
+          scale.value = 1;
           if (currentIndex < questions.length - 1) {
             setCurrentIndex(prev => prev + 1);
           } else {
@@ -680,6 +678,11 @@ export default function SwipeScreen() {
           checkWirksamkeit();
         }, displayDuration);
       } else {
+        // Kein Ergebnis → direkt zur nächsten Frage
+        translateX.value = 0;
+        translateY.value = 0;
+        rotation.value = 0;
+        scale.value = 1;
         if (currentIndex < questions.length - 1) {
           setCurrentIndex(prev => prev + 1);
         } else {
@@ -897,7 +900,7 @@ export default function SwipeScreen() {
   if (isLoading) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={["top"]}>
           <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.black} />
@@ -910,7 +913,7 @@ export default function SwipeScreen() {
   if (!currentQuestion) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={["top"]}>
           <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
           <View style={styles.emptyContainer}>
             <Text style={styles.appLogo}>#RAWLZ</Text>
@@ -938,7 +941,7 @@ export default function SwipeScreen() {
   return (
     // ← CRITICAL FIX: GestureHandlerRootView als äußerster Wrapper
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         {/* Spec: StatusBar nicht translucent */}
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
 
@@ -1087,9 +1090,9 @@ export default function SwipeScreen() {
               <BlurView intensity={80} tint="light" style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <View style={{ gap: 24, alignItems: 'center' }}>
                   {[
-                    { icon: '🔍', label: t('swipe.cloud_search'), onPress: () => { setShowCloudMenu(false); setTimeout(() => router.push('/(tabs)/search'), 150); } },
-                    { icon: '💡', label: t('swipe.cloud_suggest'), onPress: () => { setShowCloudMenu(false); setTimeout(() => router.push('/suggest'), 150); } },
-                    { icon: '📊', label: t('swipe.cloud_results'), onPress: () => { setShowCloudMenu(false); const qId = currentQuestion?.id; setTimeout(() => router.push(qId ? `/(tabs)/search?tab=results&questionId=${qId}` : '/(tabs)/search'), 150); } },
+                    { icon: '🔍', label: t('swipe.cloud_search'), onPress: () => { setShowCloudMenu(false); setTimeout(() => router.navigate('/(tabs)/search'), 150); } },
+                    { icon: '💡', label: t('swipe.cloud_suggest'), onPress: () => { setShowCloudMenu(false); setTimeout(() => router.navigate('/suggest'), 150); } },
+                    { icon: '📊', label: t('swipe.cloud_results'), onPress: () => { setShowCloudMenu(false); const qId = currentQuestion?.id; setTimeout(() => router.navigate(qId ? `/(tabs)/search?tab=results&questionId=${qId}` : '/(tabs)/search'), 150); } },
                   ].map(item => (
                     <TouchableOpacity key={item.label} onPress={item.onPress}
                       style={{ alignItems: 'center', gap: 8, padding: 16 }}>
@@ -1297,7 +1300,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden', // Fix 4: clips AI overlay to card border radius
+    // overflow: 'hidden' entfernt — auf Android inkompatibel mit elevation (Shadow-Clipping-Bug)
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
@@ -1343,14 +1346,16 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: '60%',      // Fix 3: explizit statt maxHeight — auf Android zuverlässiger
-    backgroundColor: 'rgba(0,0,0,0.88)',
+    height: '62%',
+    backgroundColor: 'rgba(0,0,0,0.90)',
+    // Border-Radius der Karte an Unterseite nachbauen (kein overflow:hidden nötig)
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 16,
-    paddingHorizontal: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    paddingTop: 14,
+    paddingHorizontal: 18,
     paddingBottom: 12,
-    overflow: 'hidden', // Inhalt wird an Overlay-Grenzen geclippt
   },
   aiTitle: {
     fontSize: 14,
