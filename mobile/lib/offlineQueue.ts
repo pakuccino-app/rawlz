@@ -145,13 +145,13 @@ export async function prefetchQuestions(
       .select('question_id')
       .eq('user_id', userId);
 
-    const votedSet = new Set((votedIds || []).map(v => v.question_id));
+    const votedSet = new Set((votedIds || []).map((v: any) => v.question_id));
 
     query = query.order('total_votes', { ascending: false }).limit(30);
     const { data } = await query;
 
     // Filter out already voted questions
-    const filteredQuestions = (data || []).filter(q => !votedSet.has(q.id));
+    const filteredQuestions = (data || []).filter((q: any) => !votedSet.has(q.id));
 
     const cacheData: CacheData = {
       questions: filteredQuestions,

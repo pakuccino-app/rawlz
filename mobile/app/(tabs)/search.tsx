@@ -133,7 +133,7 @@ export default function SearchScreen() {
       .select('id, word, yes_count, no_count, total_votes')
       .eq('id', params.questionId)
       .single()
-      .then(({ data }) => {
+      .then(({ data }: { data: any }) => {
         if (data) {
           setSelectedQuestions([data]);
         }
@@ -333,9 +333,9 @@ export default function SearchScreen() {
         .select('question_id')
         .eq('user_id', user.id);
 
-      const archivedIds = new Set((archives || []).map(a => a.question_id));
+      const archivedIds = new Set((archives || []).map((a: any) => a.question_id));
 
-      const results = (questions || []).map(q => ({
+      const results = (questions || []).map((q: any) => ({
         ...q,
         is_archived: archivedIds.has(q.id),
       }));
