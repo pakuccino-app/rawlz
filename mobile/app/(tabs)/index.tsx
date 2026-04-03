@@ -1025,7 +1025,15 @@ export default function SwipeScreen() {
                 ) : (
                   <>
                     <Text style={styles.aiSentence}>{aiContent.sentence}</Text>
-                    {aiContent.bullets?.map((bullet: string, i: number) => (
+                    {aiContent.pro?.length > 0 && (
+                      <>
+                        <Text style={[styles.aiBullet, { color: '#4ade80', fontWeight: '700', marginTop: 6 }]}>PRO</Text>
+                        {aiContent.pro.map((b: string, i: number) => <Text key={`pro-${i}`} style={styles.aiBullet}>• {b}</Text>)}
+                        <Text style={[styles.aiBullet, { color: '#f87171', fontWeight: '700', marginTop: 6 }]}>CONTRA</Text>
+                        {aiContent.contra?.map((b: string, i: number) => <Text key={`con-${i}`} style={styles.aiBullet}>• {b}</Text>)}
+                      </>
+                    )}
+                    {!aiContent.pro?.length && aiContent.bullets?.map((bullet: string, i: number) => (
                       <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
                     ))}
                     <Text style={styles.aiSource}>Quelle: KI-generiert · Kein politischer Standpunkt</Text>

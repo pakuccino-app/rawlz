@@ -9,7 +9,7 @@ const supabase = createClient(
 );
 
 const EMERGENT_LLM_KEY = Deno.env.get('EMERGENT_LLM_KEY') || 'sk-emergent-6F05870F3094c276fA';
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_API_URL = 'https://integrations.emergentagent.com/llm/v1/chat/completions';
 const CACHE_TTL_DAYS = 7;
 
 interface AIFactsResponse {
@@ -134,19 +134,37 @@ Deno.serve(async (req: Request) => {
       throw new Error('No content in OpenAI response');
     }
 
-    // Parse JSON response
+    // Parse PRO/CONTRA text format (new prompt format)
     let facts: AIFactsResponse;
     try {
-      // Remove potential markdown code blocks
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      facts = JSON.parse(cleanContent);
-      facts.generatedAt = new Date().toISOString();
+      const lines = content.trim().split('\n').map((l: string) => l.trim()).filter(Boolean);
+      // Line 0: #WORD, Line 1: sentence
+      const sentence = lines[1] || lines[0] || '';
+      // Collect PRO and CONTRA bullets
+      const proBullets: string[] = [];
+      const contraBullets: string[] = [];
+      let inPro = false;
+      let inContra = false;
+      for (const line of lines.slice(2)) {
+        if (line.toUpperCase() === 'PRO') { inPro = true; inContra = false; continue; }
+        if (line.toUpperCase() === 'CONTRA') { inContra = true; inPro = false; continue; }
+        const bullet = line.replace(/^[•\-\*]\s*/, '').trim();
+        if (!bullet) continue;
+        if (inPro) proBullets.push(bullet);
+        else if (inContra) contraBullets.push(bullet);
+      }
+      facts = {
+        sentence: sentence.replace(/^\[|\]$/g, ''),
+        bullets: [...proBullets.slice(0, 3), ...contraBullets.slice(0, 3)],
+        pro: proBullets.slice(0, 3),
+        contra: contraBullets.slice(0, 3),
+        generatedAt: new Date().toISOString(),
+      };
     } catch (parseError) {
       console.error('Failed to parse AI response:', content);
-      // Fallback: create structured response from raw text
       facts = {
-        sentence: content.slice(0, 100),
-        bullets: ['Information wird geladen...'],
+        sentence: content.slice(0, 120),
+        bullets: [],
         generatedAt: new Date().toISOString(),
       };
     }

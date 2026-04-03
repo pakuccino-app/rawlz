@@ -22,8 +22,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { COLORS } from '../../lib/constants';
 import { supabase, getCurrentUser, signOut } from '../../lib/supabase';
-import hapticPatterns from '../../lib/haptics';
+import hapticPatterns, { setHapticsEnabled as setGlobalHapticsEnabled } from '../../lib/haptics';
 import { changeLanguage, getCurrentLanguage } from '../../lib/i18n';
+import { setSoundsEnabled } from '../../lib/sounds';
 import { purchaseSupporter, restoreSupporter } from '../../lib/revenuecat';
 import { requestPasswordReset } from '../../lib/auth';
 
@@ -326,7 +327,13 @@ export default function SettingsScreen() {
         if (data) {
           setUser(data);
           setSoundEnabled(data.sound_enabled !== false);
+          setSoundsEnabled(data.sound_enabled !== false); // restore module-level flag
           setHapticsEnabled(data.haptics_enabled !== false);
+          setGlobalHapticsEnabled(data.haptics_enabled !== false); // restore module-level flag
+          // sync global i18n with stored language preference
+          if (data.language_code && data.language_code !== getCurrentLanguage()) {
+            await changeLanguage(data.language_code as 'de' | 'en');
+          }
           setFeedMode(data.geo_preference || 'global');
           setLanguage(data.language_code || 'de');
         }
@@ -388,12 +395,14 @@ export default function SettingsScreen() {
 
   async function handleSoundToggle(value: boolean) {
     setSoundEnabled(value);
+    setSoundsEnabled(value); // wire to module-level flag
     await updateUserSetting('sound_enabled', value);
     await hapticPatterns.tap();
   }
 
   async function handleHapticsToggle(value: boolean) {
     setHapticsEnabled(value);
+    setGlobalHapticsEnabled(value); // wire to module-level flag
     await updateUserSetting('haptics_enabled', value);
     if (value) await hapticPatterns.tap();
   }
@@ -449,8 +458,9 @@ export default function SettingsScreen() {
       await loadUser();
     } else if (result.shouldRestore) {
       await handleRestoreSupporter();
-    } else if (result.error) {
-      Alert.alert('Fehler', result.error);
+    } else {
+      // Product unavailable or purchase cancelled — no error popup per spec
+      console.log('Supporter purchase unavailable:', result.error);
     }
   }
 
