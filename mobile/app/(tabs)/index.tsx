@@ -13,6 +13,7 @@ import {
   StatusBar,
   Modal,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -673,19 +674,22 @@ export default function SwipeScreen() {
     }
   }
 
+  // Fix 2: delay card state switch so the exit spring animation completes before the
+  // new card content appears. Without this, resetCard() fires while withSpring() is
+  // mid-flight, snapping card back with next-question text already loaded.
   function advanceToNext() {
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    } else {
-      // Reload questions
-      if (user) loadQuestions(user);
-    }
-    
-    // Reset animations
-    translateX.value = 0;
-    translateY.value = 0;
-    rotation.value = 0;
-    scale.value = 1;
+    setTimeout(() => {
+      if (currentIndex < questions.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else {
+        if (user) loadQuestions(user);
+      }
+      // Reset animation values after content change
+      translateX.value = 0;
+      translateY.value = 0;
+      rotation.value = 0;
+      scale.value = 1;
+    }, 300);
   }
 
   // Handle swipe completion
@@ -1015,7 +1019,8 @@ export default function SwipeScreen() {
             {showAIOverlay && (
               <View style={styles.aiOverlay}>
                 <View style={styles.aiHeader}>
-                  <Text style={styles.aiTitle}>KI-FAKTEN</Text>
+                  {/* Fix 4: show actual word in Gold, not generic "KI-FAKTEN" label */}
+                  <Text style={styles.aiTitle}>{currentQuestion.word}</Text>
                   <TouchableOpacity onPress={() => setShowAIOverlay(false)}>
                     <Text style={styles.aiClose}>×</Text>
                   </TouchableOpacity>
@@ -1044,20 +1049,6 @@ export default function SwipeScreen() {
           </Animated.View>
         </GestureDetector>
 
-        {/* Bottom Bar — NACH der Karte (flex-end) */}
-        <View style={styles.bottomBar}>
-          <View style={styles.streakContainer}>
-            <Text style={styles.streakIcon}>🔥</Text>
-            <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
-          </View>
-          {/* Punkt 3+7: 🌍 öffnet Dashboard-Sheet */}
-          <TouchableOpacity style={styles.geoButton} onPress={() => setShowDashboard(true)}>
-            <Text style={[styles.geoIcon, { fontSize: 26 }]}>🌍</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/(tabs)/settings')}>
-            <Text style={styles.settingsIcon}>⚙</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Dashboard Sheet (Punkt 3) */}
         <DashboardSheet
@@ -1099,9 +1090,9 @@ export default function SwipeScreen() {
               <BlurView intensity={80} tint="light" style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <View style={{ gap: 24, alignItems: 'center' }}>
                   {[
-                    { icon: '🔍', label: t('swipe.cloud_search'), onPress: () => { setShowCloudMenu(false); router.push('/(tabs)/search'); } },
-                    { icon: '💡', label: t('swipe.cloud_suggest'), onPress: () => { setShowCloudMenu(false); router.push('/suggest'); } },
-                    { icon: '📊', label: t('swipe.cloud_results'), onPress: () => { setShowCloudMenu(false); const qId = currentQuestion?.id; router.push(qId ? `/(tabs)/search?tab=results&questionId=${qId}` : '/(tabs)/search'); } },
+                    { icon: '🔍', label: t('swipe.cloud_search'), onPress: () => { setShowCloudMenu(false); setTimeout(() => router.push('/(tabs)/search'), 150); } },
+                    { icon: '💡', label: t('swipe.cloud_suggest'), onPress: () => { setShowCloudMenu(false); setTimeout(() => router.push('/suggest'), 150); } },
+                    { icon: '📊', label: t('swipe.cloud_results'), onPress: () => { setShowCloudMenu(false); const qId = currentQuestion?.id; setTimeout(() => router.push(qId ? `/(tabs)/search?tab=results&questionId=${qId}` : '/(tabs)/search'), 150); } },
                   ].map(item => (
                     <TouchableOpacity key={item.label} onPress={item.onPress}
                       style={{ alignItems: 'center', gap: 8, padding: 16 }}>
@@ -1289,12 +1280,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
-    zIndex: 50,
+    zIndex: 999,
+    elevation: 20, // Fix 3: exceeds card elevation (8) so it renders on top on Android
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
-    elevation: 5,
   },
   resultText: {
     fontSize: 18,
@@ -1305,10 +1296,11 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     margin: 16,
-    backgroundColor: '#FFFFFF', // Punkt 2
+    backgroundColor: '#FFFFFF',
     borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden', // Fix 4: clips AI overlay to card border radius
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
@@ -1338,9 +1330,10 @@ const styles = StyleSheet.create({
   },
   wordText: {
     fontWeight: '900',
-    color: '#000000', // Punkt 2: schwarz
+    color: '#000000',
     textAlign: 'center',
     paddingHorizontal: 24,
+    marginTop: -32, // Fix 5: shift word upward from geometric center — swipeHints at bottom create visual imbalance
   },
   tapHint: {
     position: 'absolute',

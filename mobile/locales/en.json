@@ -105,7 +105,8 @@
     "expert_2fa": "2FA enabled",
     "lobby_manage_billing": "Manage billing",
     "restore_purchases": "Restore Purchases",
-    "manage_billing": "Manage Billing"
+    "manage_billing": "Manage Billing",
+    "not_available": "Not available"
   },
   "suggest": {
     "title": "Suggest a Question",

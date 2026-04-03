@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   FlatList,
   TextInput,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -292,6 +293,48 @@ const vouchStyles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+// Support button: checks if product available before showing active state
+function SupporterButton({ onPurchase, onRestore }: { onPurchase: () => void; onRestore: () => void }) {
+  const { t } = useTranslation();
+  const [available, setAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    import('../../lib/revenuecat').then(({ getOfferings }) => {
+      getOfferings()
+        .then(o => setAvailable(o != null))
+        .catch(() => setAvailable(false));
+    });
+  }, []);
+
+  if (available === null) return null; // loading, show nothing
+
+  return (
+    <>
+      <TouchableOpacity
+        style={[styles.upgradeButton, !available && { opacity: 0.4 }]}
+        onPress={available ? onPurchase : undefined}
+        activeOpacity={available ? 0.8 : 1}
+      >
+        <Text style={styles.upgradeButtonText}>
+          {available
+            ? `${t('membership.supporter_cta')} – ${t('membership.supporter_price')}`
+            : `${t('membership.supporter_cta')} – ${t('membership.not_available')}`}
+        </Text>
+      </TouchableOpacity>
+      {available && (
+        <TouchableOpacity
+          style={[styles.upgradeButton, { marginTop: 8, backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.gray300 }]}
+          onPress={onRestore}
+        >
+          <Text style={[styles.upgradeButtonText, { color: COLORS.gray500 }]}>
+            {t('membership.restore_purchases')}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+}
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -628,21 +671,7 @@ export default function SettingsScreen() {
             </View>
 
             {user?.membership_type === 'basis' && (
-              <>
-                <TouchableOpacity style={styles.upgradeButton} onPress={handlePurchaseSupporter}>
-                  <Text style={styles.upgradeButtonText}>
-                    {t('membership.supporter_cta')} – {t('membership.supporter_price')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.upgradeButton, { marginTop: 8, backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.gray300 }]}
-                  onPress={handleRestoreSupporter}
-                >
-                  <Text style={[styles.upgradeButtonText, { color: COLORS.gray500 }]}>
-                    {t('membership.restore_purchases')}
-                  </Text>
-                </TouchableOpacity>
-              </>
+              <SupporterButton onPurchase={handlePurchaseSupporter} onRestore={handleRestoreSupporter} />
             )}
 
             {user?.membership_type === 'lobby' && (
@@ -846,17 +875,20 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.legal')}</Text>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem}
+            onPress={() => Linking.openURL('https://rawlz.app/datenschutz')}>
             <Text style={styles.menuItemText}>{t('settings.privacy_policy')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem}
+            onPress={() => Linking.openURL('https://rawlz.app/nutzungsbedingungen')}>
             <Text style={styles.menuItemText}>{t('settings.terms')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem}
+            onPress={() => Linking.openURL('https://rawlz.app/impressum')}>
             <Text style={styles.menuItemText}>{t('settings.imprint')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
