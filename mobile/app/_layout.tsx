@@ -1,23 +1,32 @@
 // app/_layout.tsx
 // Root layout for RAWLZ mobile app
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
-// Initialize i18n
 import '../lib/i18n';
 import { restoreLanguage } from '../lib/i18n';
 import { preloadSounds, initAudio } from '../lib/sounds';
 import { supabase, onAuthStateChange, setupOAuthCallbackHandler } from '../lib/supabase';
 import { COLORS } from '../lib/constants';
 import { initRevenueCat } from '../lib/revenuecat';
+import { UserContext } from '../lib/userContext';
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const openDashboardRef = useRef<(() => void) | null>(null);
+
+  const userContextValue = {
+    streak,
+    setStreak,
+    openDashboard: () => openDashboardRef.current?.(),
+    registerOpenDashboard: (fn: () => void) => { openDashboardRef.current = fn; },
+  };
 
   useEffect(() => {
     async function initialize() {
@@ -101,7 +110,8 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <UserContext.Provider value={userContextValue}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -127,7 +137,8 @@ export default function RootLayout() {
           />
         )}
       </Stack>
-    </GestureHandlerRootView>
+      </GestureHandlerRootView>
+    </UserContext.Provider>
   );
 }
 

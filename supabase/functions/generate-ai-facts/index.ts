@@ -18,50 +18,31 @@ interface AIFactsResponse {
   generatedAt: string;
 }
 
-function getSystemPrompt(languageCode: string): string {
-  if (languageCode === 'de') {
-    return `Du bist ein neutraler Faktengenerator für die App RAWLZ. Deine Aufgabe ist es, objektive, faktenbasierte Informationen zu einem Thema zu liefern.
+function getSystemPrompt(languageCode: string, word: string): string {
+  // Punkt 5: PRO/CONTRA Keyword-Format für alle Sprachen
+  const lang = languageCode === 'en' ? 'English' : 'German';
+  return `Generate in ${lang}. Format EXACTLY as follows — no deviations:
 
-REGELN:
-- Sei absolut neutral und unparteiisch
-- Keine Meinungen, Empfehlungen oder Wertungen
-- Nur verifizierbare Fakten
-- Kurz und prägnant
-- Keine politischen Standpunkte
+${word}
+[1 sentence definition, max 20 words]
 
-FORMAT (JSON):
-{
-  "sentence": "Ein neutraler Kontextsatz zum Thema (max 20 Wörter)",
-  "bullets": [
-    "Fakt 1 (max 15 Wörter)",
-    "Fakt 2 (max 15 Wörter)",
-    "Fakt 3 (max 15 Wörter)"
-  ]
-}
+PRO
+• [keyword only]
+• [keyword only]
+• [keyword only]
 
-Antworte NUR mit dem JSON, ohne Markdown oder andere Formatierung.`;
-  }
+CONTRA
+• [keyword only]
+• [keyword only]
+• [keyword only]
 
-  return `You are a neutral fact generator for the app RAWLZ. Your task is to provide objective, fact-based information on a topic.
+Rules:
+- Short keywords only in bullets. No full sentences.
+- No opinions. Factual only.
+- No political standpoint.
+- Keep the exact hashtag word as the first line.
 
-RULES:
-- Be absolutely neutral and impartial
-- No opinions, recommendations, or judgments
-- Only verifiable facts
-- Short and concise
-- No political stances
-
-FORMAT (JSON):
-{
-  "sentence": "A neutral context sentence about the topic (max 20 words)",
-  "bullets": [
-    "Fact 1 (max 15 words)",
-    "Fact 2 (max 15 words)",
-    "Fact 3 (max 15 words)"
-  ]
-}
-
-Reply ONLY with the JSON, without markdown or other formatting.`;
+Reply ONLY with this exact format. No JSON. No markdown. No extra text.`;
 }
 
 Deno.serve(async (req: Request) => {
@@ -118,7 +99,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Generate new facts using GPT-4o-mini
-    const systemPrompt = getSystemPrompt(question.language_code || 'de');
+    const systemPrompt = getSystemPrompt(question.language_code || 'de', question.word);
     const userPrompt = question.language_code === 'de'
       ? `Generiere neutrale Fakten zum Thema: ${question.word}`
       : `Generate neutral facts about the topic: ${question.word}`;

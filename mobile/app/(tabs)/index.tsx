@@ -1,6 +1,5 @@
 // app/(tabs)/index.tsx
-// Swipe Screen - Main voting interface with all Phase 2 features
-// Daily Pulse, Wirksamkeits-Anzeige, Abuse Reporting, Offline Support
+// Swipe Screen — RAWLZ (Punkte 1–9 implementiert)
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -12,8 +11,11 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -29,12 +31,13 @@ import Animated, {
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,  // ← CRITICAL: fehlte komplett
+  GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import NetInfo from '@react-native-community/netinfo';
 
 import { COLORS, getWordFontSize, RESULT_THRESHOLDS, ANIMATIONS } from '../../lib/constants';
 import { supabase, getCurrentUser, getSession } from '../../lib/supabase';
+import { useUserCtx } from '../../lib/userContext';
 import hapticPatterns from '../../lib/haptics';
 import { playSound } from '../../lib/sounds';
 import {
@@ -87,9 +90,214 @@ interface WirksamkeitData {
   effectivenessPct: number;
 }
 
+// ─── DASHBOARD SHEET COMPONENT ────────────────────────────────────────────────
+// Punkt 3: Globus-Button öffnet dieses Sheet (BlurView, Membership, Trust, Votes, Badges, Geo)
+
+interface DashboardSheetProps {
+  visible: boolean;
+  onClose: () => void;
+  user: any;
+}
+
+const BADGE_DEFS = [
+  { key: 'first_vote',   icon: '📦', label: 'Erste Stimme',   minVotes: 1,   membership: null, minStreak: 0 },
+  { key: 'active',       icon: '🔥', label: 'Aktiv',           minVotes: 10,  membership: null, minStreak: 0 },
+  { key: 'power_voter',  icon: '⚡', label: 'Power-Voter',     minVotes: 50,  membership: null, minStreak: 0 },
+  { key: 'wirksamkeit',  icon: '💯', label: 'Wirksamkeit',     minVotes: 100, membership: null, minStreak: 0 },
+  { key: 'supporter',    icon: '⭐', label: 'Supporter',       minVotes: 0,   membership: 'supporter', minStreak: 0 },
+  { key: 'wochenpuls',   icon: '📅', label: 'Wochenpuls',      minVotes: 0,   membership: null, minStreak: 7 },
+];
+
+const GEO_OPTIONS = [
+  { key: 'global', label: '🌍 Global' },
+  { key: 'country', label: '🏳️ Mein Land' },
+  { key: 'region', label: '📍 Meine Region' },
+];
+
+const MEMBERSHIP_LABELS: Record<string, string> = {
+  basis: 'Basis', supporter: 'Supporter', expert: 'Experte', lobby: 'Lobby',
+};
+const MEMBERSHIP_CHARS: Record<string, string> = {
+  basis: 'B', supporter: 'S', expert: 'E', lobby: 'L',
+};
+
+function DashboardSheet({ visible, onClose, user }: DashboardSheetProps) {
+  const [voteStats, setVoteStats] = useState({ yes: 0, no: 0, total: 0 });
+  const [earnedBadges, setEarnedBadges] = useState<Set<string>>(new Set());
+  const [geoFilter, setGeoFilter] = useState('global'); // session-only, kein DB-Write
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+
+  useEffect(() => {
+    if (visible && user?.id) {
+      loadStats();
+    }
+  }, [visible, user?.id]);
+
+  async function loadStats() {
+    if (!user?.id) return;
+    setIsLoadingStats(true);
+    try {
+      // Punkt 3D: SELECT vote_value, COUNT(*) FROM votes WHERE user_id=$uid GROUP BY vote_value
+      const { data: votes } = await supabase
+        .from('votes')
+        .select('vote_value')
+        .eq('user_id', user.id);
+
+      const yes = (votes || []).filter((v: any) => v.vote_value === 'yes').length;
+      const no  = (votes || []).filter((v: any) => v.vote_value === 'no').length;
+      setVoteStats({ yes, no, total: (votes || []).length });
+
+      // Badges earned
+      const earned = new Set<string>();
+      const totalV = (votes || []).length;
+      if (totalV >= 1)   earned.add('first_vote');
+      if (totalV >= 10)  earned.add('active');
+      if (totalV >= 50)  earned.add('power_voter');
+      if (totalV >= 100) earned.add('wirksamkeit');
+      if (user.membership_type === 'supporter') earned.add('supporter');
+      if ((user.streak_count || 0) >= 7) earned.add('wochenpuls');
+      setEarnedBadges(earned);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }
+
+  const trust = user?.trust_score || 0;
+  const trustColor = trust >= 85 ? '#D4AF37' : '#16A34A';
+  const memType = user?.membership_type || 'basis';
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={ds.backdrop} onPress={onClose} activeOpacity={1} />
+      <View style={ds.sheetContainer}>
+        <BlurView intensity={80} tint="light" style={ds.blur}>
+          <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
+
+            {/* A) HEADER */}
+            <View style={ds.handle} />
+            <View style={ds.header}>
+              <Text style={ds.logo}>#RAWLZ  🔥</Text>
+              <Text style={ds.headerTitle}>Deine Wahl</Text>
+              <Text style={ds.headerSub}>Weiter abstimmen, um deinen Streak aufzubauen</Text>
+            </View>
+
+            {/* B) MITGLIEDSCHAFT */}
+            <View style={ds.tile}>
+              <View style={[ds.memberCircle, { backgroundColor: memType === 'lobby' ? '#7C3AED' : memType === 'expert' ? '#2563EB' : memType === 'supporter' ? '#D4AF37' : '#6B7280' }]}>
+                <Text style={ds.memberChar}>{MEMBERSHIP_CHARS[memType] || 'B'}</Text>
+              </View>
+              <Text style={ds.memberLabel}>{MEMBERSHIP_LABELS[memType] || 'Basis'}</Text>
+            </View>
+
+            {/* C) VERTRAUENSWERT */}
+            <View style={ds.tile}>
+              <Text style={ds.tileLabel}>Vertrauenswert: <Text style={{ color: trustColor, fontWeight: '700' }}>{trust} / 100</Text></Text>
+              <View style={ds.trustBar}>
+                <View style={[ds.trustFill, { width: `${trust}%` as any, backgroundColor: trustColor }]} />
+              </View>
+              <Text style={ds.tileHint}>Experte ab ≥ 85</Text>
+            </View>
+
+            {/* D) VOTING-STATISTIK */}
+            <View style={[ds.tile, { flexDirection: 'row', gap: 8 }]}>
+              <View style={[ds.statBox, { backgroundColor: '#DCFCE7' }]}>
+                <Text style={ds.statNum}>{voteStats.yes}</Text>
+                <Text style={[ds.statLabel, { color: '#16A34A' }]}>JA</Text>
+              </View>
+              <View style={[ds.statBox, { backgroundColor: '#FEE2E2' }]}>
+                <Text style={ds.statNum}>{voteStats.no}</Text>
+                <Text style={[ds.statLabel, { color: '#DC2626' }]}>NEIN</Text>
+              </View>
+              <View style={[ds.statBox, { backgroundColor: '#FEF9C3' }]}>
+                <Text style={ds.statNum}>{voteStats.total}</Text>
+                <Text style={[ds.statLabel, { color: '#92400E' }]}>Gesamt</Text>
+              </View>
+            </View>
+
+            {/* E) BADGES 3×2 */}
+            <View style={[ds.tile, { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }]}>
+              {BADGE_DEFS.map(b => {
+                const earned = earnedBadges.has(b.key);
+                return (
+                  <View key={b.key} style={[ds.badge, !earned && ds.badgeLocked]}>
+                    <Text style={[ds.badgeIcon, !earned && { opacity: 0.3 }]}>{b.icon}</Text>
+                    <Text style={[ds.badgeLabel, !earned && { color: '#9CA3AF' }]}>{b.label}</Text>
+                    {earned && <Text style={ds.badgeCheck}>✓</Text>}
+                    {!earned && <Text style={ds.badgeLock}>🔒</Text>}
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* F) GEO-FILTER — session only, kein DB-Write */}
+            <View style={ds.tile}>
+              <View style={ds.separator} />
+              <Text style={ds.tileLabel}>Feed anzeigen:</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                {GEO_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[ds.geoBtn, geoFilter === opt.key && ds.geoBtnActive]}
+                    onPress={() => setGeoFilter(opt.key)}
+                  >
+                    <Text style={[ds.geoBtnText, geoFilter === opt.key && ds.geoBtnTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={{ height: 24 }} />
+          </ScrollView>
+        </BlurView>
+      </View>
+    </Modal>
+  );
+}
+
+const ds = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
+  sheetContainer: { height: '75%', overflow: 'hidden', borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  blur: { flex: 1, padding: 0 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#C7C7CC', alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  header: { paddingHorizontal: 20, paddingVertical: 12 },
+  logo: { fontSize: 22, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#000', marginTop: 2 },
+  headerSub: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  tile: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginBottom: 12, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
+  tileLabel: { fontSize: 14, color: '#374151', fontWeight: '600' },
+  tileHint: { fontSize: 11, color: '#9CA3AF', marginTop: 4 },
+  memberCircle: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 6, alignSelf: 'center' },
+  memberChar: { fontSize: 22, fontWeight: '900', color: '#FFF' },
+  memberLabel: { fontSize: 14, fontWeight: '600', color: '#000', textAlign: 'center' },
+  trustBar: { height: 8, backgroundColor: '#E5E7EB', borderRadius: 4, marginTop: 8, overflow: 'hidden' },
+  trustFill: { height: '100%', borderRadius: 4 },
+  statBox: { flex: 1, borderRadius: 12, padding: 12, alignItems: 'center' },
+  statNum: { fontSize: 24, fontWeight: '900', color: '#000' },
+  statLabel: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  badge: { width: '30%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  badgeLocked: { backgroundColor: '#F3F4F6' },
+  badgeIcon: { fontSize: 24, marginBottom: 4 },
+  badgeLabel: { fontSize: 10, fontWeight: '600', color: '#374151', textAlign: 'center' },
+  badgeCheck: { fontSize: 11, color: '#16A34A', marginTop: 2 },
+  badgeLock: { fontSize: 11, marginTop: 2 },
+  separator: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 12 },
+  geoBtn: { flex: 1, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center' },
+  geoBtnActive: { backgroundColor: '#000' },
+  geoBtnText: { fontSize: 11, fontWeight: '600', color: '#374151' },
+  geoBtnTextActive: { color: '#FFF' },
+});
+
+// ─── MAIN SWIPE SCREEN ────────────────────────────────────────────────────────
+
 export default function SwipeScreen() {
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ questionId?: string }>();
+  const { setStreak, registerOpenDashboard } = useUserCtx();
+
+  // Punkt 3: Dashboard Sheet
+  const [showDashboard, setShowDashboard] = useState(false);
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -120,10 +328,12 @@ export default function SwipeScreen() {
   const rotation = useSharedValue(0);
   const scale = useSharedValue(1);
 
-  // Load user and questions
+  // Load user and questions + Dashboard-Sheet registrieren (Punkt 3 + Punkt 7)
   useEffect(() => {
     loadData();
     startNetworkListener();
+    // Punkt 3/7: Tab-Bar 🌍 kann das Sheet öffnen
+    registerOpenDashboard(() => setShowDashboard(true));
 
     // Network state listener
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -189,6 +399,7 @@ export default function SwipeScreen() {
 
       if (userData) {
         setUser(userData);
+        setStreak(userData.streak_count || 0); // Punkt 7: Tab-Bar Streak sync
         await loadQuestions(userData);
         
         // Prefetch for offline
@@ -258,7 +469,7 @@ export default function SwipeScreen() {
       .select('question_id')
       .eq('user_id', userData.id);
 
-    const votedIds = new Set((votedQuestions || []).map(v => v.question_id));
+    const votedIds = new Set((votedQuestions || []).map((v: any) => v.question_id));
 
     // Filter out archived
     const { data: archivedQuestions } = await supabase
@@ -266,7 +477,7 @@ export default function SwipeScreen() {
       .select('question_id')
       .eq('user_id', userData.id);
 
-    const archivedIds = new Set((archivedQuestions || []).map(a => a.question_id));
+    const archivedIds = new Set((archivedQuestions || []).map((a: any) => a.question_id));
 
     // INV-12: Snoozed-Fragen aus AsyncStorage prüfen
     // - snoozeUntil <= now → Frage zurück in Feed, Eintrag aus AsyncStorage löschen
@@ -285,12 +496,12 @@ export default function SwipeScreen() {
     }
 
     let filteredQuestions = (allQuestions || []).filter(
-      q => !votedIds.has(q.id) && !archivedIds.has(q.id) && !snoozedIds.has(q.id)
+      (q: any) => !votedIds.has(q.id) && !archivedIds.has(q.id) && !snoozedIds.has(q.id)
     );
 
     // Add daily pulse at the beginning (INV-14)
     if (dailyPulse && !votedIds.has(dailyPulse.id) && !archivedIds.has(dailyPulse.id)) {
-      filteredQuestions = [dailyPulse, ...filteredQuestions.filter(q => q.id !== dailyPulse.id)];
+      filteredQuestions = [dailyPulse, ...filteredQuestions.filter((q: any) => q.id !== dailyPulse.id)];
     }
 
     setQuestions(filteredQuestions);
@@ -336,7 +547,25 @@ export default function SwipeScreen() {
 
       if (error) throw error;
 
-      // Streak + active_days_count aktualisieren
+      // Punkt 3E: Badge-Check nach Vote INSERT
+      if (voteValue === 'yes' || voteValue === 'no') {
+        const { count: voteCount } = await supabase
+          .from('votes')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        const vc = voteCount || 0;
+        const badgesToCheck: string[] = [];
+        if (vc >= 1)   badgesToCheck.push('first_vote');
+        if (vc >= 10)  badgesToCheck.push('active');
+        if (vc >= 50)  badgesToCheck.push('power_voter');
+        if (vc >= 100) badgesToCheck.push('wirksamkeit');
+        if (user.membership_type === 'supporter') badgesToCheck.push('supporter');
+        if ((user.streak_count || 0) >= 7) badgesToCheck.push('wochenpuls');
+        for (const badge of badgesToCheck) {
+          await supabase.from('badges')
+            .upsert({ user_id: user.id, badge_type: badge }, { onConflict: 'user_id,badge_type', ignoreDuplicates: true });
+        }
+      }
       const today = new Date().toISOString().split('T')[0];
       if (user.last_active_date !== today) {
         const isConsecutive = user.last_active_date === 
@@ -694,8 +923,15 @@ export default function SwipeScreen() {
     );
   }
 
-  const wordLength = currentQuestion.word.length - 1;
-  const fontSize = getWordFontSize(wordLength);
+  // Punkt 2: Dynamische Schriftgröße nach Zeichenanzahl OHNE #
+  const wordWithoutHash = currentQuestion.word.startsWith('#')
+    ? currentQuestion.word.slice(1)
+    : currentQuestion.word;
+  const charCount = wordWithoutHash.length;
+  const fontSize = charCount <= 8  ? 52
+    : charCount <= 14 ? 42
+    : charCount <= 20 ? 32
+    : 24;
   const isDailyPulse = currentQuestion.is_daily_pulse;
 
   return (
@@ -762,8 +998,8 @@ export default function SwipeScreen() {
                   <Text style={styles.noText}>👎</Text>
                 </Animated.View>
 
-                {/* Frage-Wort */}
-                <Text style={[styles.wordText, { fontSize }]}>
+                {/* Frage-Wort — Punkt 2: numberOfLines=1, kein Zeilenumbruch */}
+                <Text style={[styles.wordText, { fontSize }]} numberOfLines={1} adjustsFontSizeToFit>
                   {currentQuestion.word}
                 </Text>
 
@@ -806,13 +1042,21 @@ export default function SwipeScreen() {
             <Text style={styles.streakIcon}>🔥</Text>
             <Text style={styles.streakCount}>{user?.streak_count || 0}</Text>
           </View>
-          <TouchableOpacity style={styles.geoButton}>
-            <Text style={styles.geoIcon}>🌍</Text>
+          {/* Punkt 3+7: 🌍 öffnet Dashboard-Sheet */}
+          <TouchableOpacity style={styles.geoButton} onPress={() => setShowDashboard(true)}>
+            <Text style={[styles.geoIcon, { fontSize: 26 }]}>🌍</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/(tabs)/settings')}>
             <Text style={styles.settingsIcon}>⚙</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Dashboard Sheet (Punkt 3) */}
+        <DashboardSheet
+          visible={showDashboard}
+          onClose={() => setShowDashboard(false)}
+          user={user}
+        />
 
         {/* Bottom Sheet */}
         {showBottomSheet && (
@@ -840,63 +1084,29 @@ export default function SwipeScreen() {
           </View>
         )}
 
-        {/* Cloud Menu (Wolke) */}
+        {/* Cloud Menu (Wolke) — Punkt 4: BlurView */}
         {showCloudMenu && (
-          <View style={styles.cloudMenuOverlay}>
-            <TouchableOpacity
-              style={styles.cloudBackdrop}
-              onPress={() => setShowCloudMenu(false)}
-            />
-            <View style={styles.cloudMenu}>
-              <View style={styles.cloudHeader}>
-                <Text style={styles.cloudTitle}>#RAWLZ</Text>
-                <TouchableOpacity onPress={() => setShowCloudMenu(false)}>
-                  <Text style={styles.cloudClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.cloudOption} onPress={() => {
-                setShowCloudMenu(false);
-                router.push('/(tabs)/search');
-              }}>
-                <View style={styles.cloudOptionIcon}>
-                  <Text style={styles.cloudOptionEmoji}>🔍</Text>
+          <Modal visible={showCloudMenu} transparent animationType="fade" onRequestClose={() => setShowCloudMenu(false)}>
+            <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowCloudMenu(false)} activeOpacity={1}>
+              <BlurView intensity={80} tint="light" style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ gap: 24, alignItems: 'center' }}>
+                  {[
+                    { icon: '🔍', label: t('swipe.cloud_search'), onPress: () => { setShowCloudMenu(false); router.push('/(tabs)/search'); } },
+                    { icon: '💡', label: t('swipe.cloud_suggest'), onPress: () => { setShowCloudMenu(false); router.push('/suggest'); } },
+                    { icon: '📊', label: t('swipe.cloud_results'), onPress: () => { setShowCloudMenu(false); const qId = currentQuestion?.id; router.push(qId ? `/(tabs)/search?tab=results&questionId=${qId}` : '/(tabs)/search'); } },
+                  ].map(item => (
+                    <TouchableOpacity key={item.label} onPress={item.onPress}
+                      style={{ alignItems: 'center', gap: 8, padding: 16 }}>
+                      <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(255,255,255,0.9)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(0,0,0,0.08)' }}>
+                        <Text style={{ fontSize: 32 }}>{item.icon}</Text>
+                      </View>
+                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#000' }}>{item.label}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_search')}</Text>
-                  <Text style={styles.cloudOptionSub}>Abstimmungen finden & vergleichen</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cloudOption} onPress={() => {
-                setShowCloudMenu(false);
-                router.push('/suggest');
-              }}>
-                <View style={styles.cloudOptionIcon}>
-                  <Text style={styles.cloudOptionEmoji}>💡</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_suggest')}</Text>
-                  <Text style={styles.cloudOptionSub}>Wort vorschlagen · Autocomplete</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cloudOption} onPress={() => {
-                setShowCloudMenu(false);
-                const qId = currentQuestion?.id;
-                if (qId) {
-                  router.push(`/(tabs)/search?tab=results&questionId=${qId}`);
-                } else {
-                  router.push('/(tabs)/search');
-                }
-              }}>
-                <View style={styles.cloudOptionIcon}>
-                  <Text style={styles.cloudOptionEmoji}>📊</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cloudOptionLabel}>{t('swipe.cloud_results')}</Text>
-                  <Text style={styles.cloudOptionSub}>Markieren · Zusammenstellen · Teilen</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
+              </BlurView>
+            </TouchableOpacity>
+          </Modal>
         )}
 
         {/* Wirksamkeit Overlay */}
@@ -921,7 +1131,7 @@ export default function SwipeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F2F2F7', // Punkt 1: App-Hintergrund
   },
   headerBar: {
     flexDirection: 'row',
@@ -947,13 +1157,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   yesText: {
-    fontSize: 22,
+    fontSize: 32, // Punkt 6: 40% grösser (22 * 1.4)
     fontWeight: '800',
     color: '#10B981',
     letterSpacing: 2,
   },
   noText: {
-    fontSize: 22,
+    fontSize: 32, // Punkt 6: 40% grösser (22 * 1.4)
     fontWeight: '800',
     color: '#EF4444',
     letterSpacing: 2,
@@ -1087,15 +1297,15 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     margin: 16,
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
+    backgroundColor: '#FFFFFF', // Punkt 2
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 8,
   },
   voteIndicator: {
     position: 'absolute',
@@ -1120,7 +1330,7 @@ const styles = StyleSheet.create({
   },
   wordText: {
     fontWeight: '900',
-    color: COLORS.black,
+    color: '#000000', // Punkt 2: schwarz
     textAlign: 'center',
     paddingHorizontal: 24,
   },
@@ -1135,7 +1345,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(26, 26, 46, 0.95)',
+    backgroundColor: 'rgba(0,0,0,0.85)', // Punkt 5
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     padding: 24,
@@ -1143,21 +1353,23 @@ const styles = StyleSheet.create({
   },
   aiTitle: {
     fontSize: 14,
-    color: COLORS.gold,
-    fontWeight: '600',
+    color: '#D4AF37', // Punkt 5: Gold
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginBottom: 12,
   },
   aiSentence: {
-    fontSize: 16,
-    color: COLORS.white,
-    marginBottom: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    color: '#FFFFFF',
+    marginBottom: 12,
+    lineHeight: 22,
   },
   aiBullet: {
-    fontSize: 14,
-    color: COLORS.white,
-    marginBottom: 8,
-    lineHeight: 20,
+    fontSize: 13,
+    color: '#D4AF37', // Punkt 5: Bullets in Gold
+    marginBottom: 6,
+    lineHeight: 19,
   },
   aiSource: {
     fontSize: 12,
