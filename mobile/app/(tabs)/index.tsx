@@ -311,10 +311,12 @@ export default function SwipeScreen() {
   const [flashColor, setFlashColor] = useState<string | null>(null);
   const [showAIOverlay, setShowAIOverlay] = useState(false);
   const [aiContent, setAIContent] = useState<any>(null);
-  const [isAILoading, setIsAILoading] = useState(false); // Bug 3: Loading-State
-  const [aiError, setAIError] = useState<string | null>(null); // Bug 3: Fehler-State
+  const [isAILoading, setIsAILoading] = useState(false);
+  const [aiError, setAIError] = useState<string | null>(null);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [showCloudMenu, setShowCloudMenu] = useState(false);
+  // Pending result: collected during submitVote, shown AFTER card exits
+  const pendingResultRef = useRef<{ yes: number; no: number; total: number } | null>(null);
   
   // Wirksamkeit state
   const [showWirksamkeit, setShowWirksamkeit] = useState(false);
@@ -593,44 +595,18 @@ export default function SwipeScreen() {
 
         if (updated) {
           const threshold = RESULT_THRESHOLDS[user.membership_type as keyof typeof RESULT_THRESHOLDS] || 500;
-          
+
           if (updated.total_votes >= threshold) {
-            // Vollständiges Ergebnis anzeigen
             const yesPct = Math.round((updated.yes_count * 100) / updated.total_votes);
-            const noPct = 100 - yesPct;
-            setResultData({
-              yes: yesPct,
-              no: noPct,
-              total: updated.total_votes,
-            });
-            setShowResult(true);
-            setTimeout(() => {
-              setShowResult(false);
-              setResultData(null);
-              checkWirksamkeit();
-              advanceToNext();
-            }, 3000);
-            return;
+            // Ergebnis in Ref speichern — advanceToNext zeigt es NACH dem Kartenabgang
+            pendingResultRef.current = { yes: yesPct, no: 100 - yesPct, total: updated.total_votes };
           } else {
-            // Bug 4: Threshold noch nicht erreicht → Hinweis anzeigen statt nichts
-            setResultData({
-              yes: -1, // Signalwert: Threshold nicht erreicht
-              no: -1,
-              total: updated.total_votes,
-            });
-            setShowResult(true);
-            setTimeout(() => {
-              setShowResult(false);
-              setResultData(null);
-              checkWirksamkeit();
-              advanceToNext();
-            }, 2500);
-            return;
+            // Threshold nicht erreicht — Hinweis nach Kartenabgang
+            pendingResultRef.current = { yes: -1, no: -1, total: updated.total_votes };
           }
         }
       }
 
-      // Check Wirksamkeit (after 100 votes)
       await checkWirksamkeit();
       advanceToNext();
     } catch (error) {
@@ -674,21 +650,42 @@ export default function SwipeScreen() {
     }
   }
 
-  // Fix 2: delay card state switch so the exit spring animation completes before the
-  // new card content appears. Without this, resetCard() fires while withSpring() is
-  // mid-flight, snapping card back with next-question text already loaded.
+  // Fix 1+2: result erscheint erst NACH dem Kartenabgang (300ms Verzögerung).
+  // pendingResultRef speichert die Daten während die Karte noch animiert.
   function advanceToNext() {
     setTimeout(() => {
-      if (currentIndex < questions.length - 1) {
-        setCurrentIndex(prev => prev + 1);
-      } else {
-        if (user) loadQuestions(user);
-      }
-      // Reset animation values after content change
+      // Karte ist jetzt off-screen — Position sofort zurücksetzen
       translateX.value = 0;
       translateY.value = 0;
       rotation.value = 0;
       scale.value = 1;
+
+      const pending = pendingResultRef.current;
+      pendingResultRef.current = null;
+
+      if (pending) {
+        // Ergebnis JETZT zeigen (Karte weg, saubere Anzeige)
+        setResultData(pending);
+        setShowResult(true);
+        const displayDuration = pending.yes === -1 ? 2500 : 3000;
+        setTimeout(() => {
+          setShowResult(false);
+          setResultData(null);
+          // Nächste Karte laden
+          if (currentIndex < questions.length - 1) {
+            setCurrentIndex(prev => prev + 1);
+          } else {
+            if (user) loadQuestions(user);
+          }
+          checkWirksamkeit();
+        }, displayDuration);
+      } else {
+        if (currentIndex < questions.length - 1) {
+          setCurrentIndex(prev => prev + 1);
+        } else {
+          if (user) loadQuestions(user);
+        }
+      }
     }, 300);
   }
 
@@ -1028,7 +1025,7 @@ export default function SwipeScreen() {
                 {!aiContent || aiContent.isLoading ? (
                   <ActivityIndicator color="#D4AF37" size="small" style={{ marginVertical: 16 }} />
                 ) : (
-                  <>
+                  <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
                     <Text style={styles.aiSentence}>{aiContent.sentence}</Text>
                     {aiContent.pro?.length > 0 && (
                       <>
@@ -1042,7 +1039,7 @@ export default function SwipeScreen() {
                       <Text key={i} style={styles.aiBullet}>• {bullet}</Text>
                     ))}
                     <Text style={styles.aiSource}>Quelle: KI-generiert · Kein politischer Standpunkt</Text>
-                  </>
+                  </ScrollView>
                 )}
               </View>
             )}
@@ -1346,11 +1343,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.85)', // Punkt 5
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    padding: 24,
-    maxHeight: '60%',
+    height: '60%',      // Fix 3: explizit statt maxHeight — auf Android zuverlässiger
+    backgroundColor: 'rgba(0,0,0,0.88)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    overflow: 'hidden', // Inhalt wird an Overlay-Grenzen geclippt
   },
   aiTitle: {
     fontSize: 14,

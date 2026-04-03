@@ -876,19 +876,27 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>{t('settings.legal')}</Text>
 
           <TouchableOpacity style={styles.menuItem}
-            onPress={() => Linking.openURL('https://rawlz.app/datenschutz')}>
+            onPress={() => Alert.alert(
+              t('settings.privacy_policy'),
+              'Die Datenschutzerklärung ist unter rawlz.app/datenschutz verfügbar. Kontakt: datenschutz@rawlz.app',
+              [{ text: 'OK' }, { text: 'E-Mail', onPress: () => Linking.openURL('mailto:datenschutz@rawlz.app') }]
+            )}>
             <Text style={styles.menuItemText}>{t('settings.privacy_policy')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}
-            onPress={() => Linking.openURL('https://rawlz.app/nutzungsbedingungen')}>
+            onPress={() => Alert.alert(
+              t('settings.terms'),
+              'Die Nutzungsbedingungen sind unter rawlz.app/nutzungsbedingungen verfügbar.',
+              [{ text: 'OK' }]
+            )}>
             <Text style={styles.menuItemText}>{t('settings.terms')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}
-            onPress={() => Linking.openURL('https://rawlz.app/impressum')}>
+            onPress={() => Linking.openURL('mailto:kontakt@rawlz.app?subject=Impressum')}>
             <Text style={styles.menuItemText}>{t('settings.imprint')}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
